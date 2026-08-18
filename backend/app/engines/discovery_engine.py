@@ -108,6 +108,7 @@ def parse_package_json(filepath, relative_path):
                 "depth": 0,
                 "type": "library",
                 "source_file": relative_path,
+                "version_source": "manifest",
                 "supplier": supplier,
                 "repository": repo,
                 "license": license_str
@@ -146,6 +147,7 @@ def parse_package_lock(filepath, relative_path):
                         "depth": pkg_path.count("node_modules"),
                         "type": "library",
                         "source_file": relative_path,
+                        "version_source": "lockfile",
                         "hash": integrity,
                         "license": license_str,
                         "dependencies": list(pkg_info.get("dependencies", {}).keys())
@@ -165,6 +167,7 @@ def parse_package_lock(filepath, relative_path):
                             "depth": depth,
                             "type": "library",
                             "source_file": relative_path,
+                            "version_source": "lockfile",
                             "hash": integrity,
                             "dependencies": list(info.get("requires", {}).keys())
                         })
@@ -201,7 +204,8 @@ def parse_requirements_txt(filepath, relative_path):
                     "direct": True,
                     "depth": 0,
                     "type": "library",
-                    "source_file": relative_path
+                    "source_file": relative_path,
+                    "version_source": "manifest"
                 })
             else:
                 # Name only without strict version spec
@@ -215,7 +219,8 @@ def parse_requirements_txt(filepath, relative_path):
                         "direct": True,
                         "depth": 0,
                         "type": "library",
-                        "source_file": relative_path
+                        "source_file": relative_path,
+                        "version_source": "manifest"
                     })
     except Exception as e:
         print(f"Error parsing requirements.txt {filepath}: {str(e)}")
@@ -252,7 +257,8 @@ def parse_pom_xml(filepath, relative_path):
                     "direct": True,
                     "depth": 0,
                     "type": "library",
-                    "source_file": relative_path
+                    "source_file": relative_path,
+                    "version_source": "manifest"
                 })
     except Exception as e:
         print(f"Error parsing pom.xml {filepath}: {str(e)}")
@@ -281,7 +287,8 @@ def parse_dockerfile(filepath, relative_path):
                 "direct": True,
                 "depth": 0,
                 "type": "container",
-                "source_file": relative_path
+                "source_file": relative_path,
+                "version_source": "manifest"
             })
     except Exception as e:
         print(f"Error parsing Dockerfile {filepath}: {str(e)}")

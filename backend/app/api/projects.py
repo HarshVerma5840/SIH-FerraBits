@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.security import get_db, get_current_user
 from backend.app.models.database import (
     Project, Scan, SBOM, SBOMComponent, Dependency, SBOMVersion, SBOMDiff,
-    Vulnerability, RiskAssessment, Anomaly, RemediationRecommendation
+    Vulnerability, RiskAssessment, Anomaly, RemediationRecommendation, SecurityFinding
 )
 from backend.app.engines import run_whatif_simulation, build_dependency_graph, OFFLINE_VULN_DB
 from pydantic import BaseModel
@@ -127,19 +127,38 @@ def get_project_details(project_id: int, db: Session = Depends(get_db), current_
                 "classification": an.classification,
                 "indicators": json.loads(an.indicators_json)
             } for an in anoms]
-            
+            # Load Security Findings
+            findings = db.query(SecurityFinding).filter_by(scan_id=latest_scan.id).all()
+            findings_map = {}
+            for f in findings:
+                if f.component_purl not in findings_map:
+                    findings_map[f.component_purl] = []
+                findings_map[f.component_purl].append(f)
+                
             for c in db_components:
-                c_vulns = [{
-                    "cve_id": v.cve_id,
-                    "cvss_score": v.cvss_score,
-                    "severity": v.severity,
-                    "description": v.description
-                } for v in c.vulnerabilities]
+                c_findings = findings_map.get(c.purl, [])
+                c_vulns = []
+                for f in c_findings:
+                    v = f.vulnerability
+                    c_vulns.append({
+                        "cve_id": v.vulnerability_id if v else f.vulnerability_id,
+                        "cvss_score": f.cvss,
+                        "severity": f.severity,
+                        "description": v.summary if v else ""
+                    })
                 
                 vulnerabilities.extend(c_vulns)
                 
                 c_assess = assess_map.get(c.purl)
                 c_anom = anoms_map.get(c.purl)
+                
+                # Extract risk factors
+                r_factors = []
+                if c_assess and c_assess.risk_factors:
+                    try:
+                        r_factors = json.loads(c_assess.risk_factors)
+                    except:
+                        pass
                 
                 components.append({
                     "id": c.id,
@@ -152,9 +171,12 @@ def get_project_details(project_id: int, db: Session = Depends(get_db), current_
                     "direct": c.direct,
                     "source_file": c.source_file,
                     "confidence": c.confidence,
+                    "version_source": c.version_source,
+                    "version_confidence": c.version_confidence,
                     "risk_score": c_assess.risk_score if c_assess else 0,
                     "risk_level": c_assess.risk_level if c_assess else "LOW",
                     "explanation": c_assess.explanation if c_assess else "No risk assessed.",
+                    "risk_factors": r_factors,
                     "anomaly_score": c_anom.anomaly_score if c_anom else 0,
                     "vulnerabilities": c_vulns
                 })

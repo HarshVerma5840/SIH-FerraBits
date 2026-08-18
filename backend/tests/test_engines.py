@@ -6,7 +6,7 @@ from backend.app.engines.discovery_engine import discover_manifests, discover_de
 from backend.app.engines.sbom_engine import generate_cyclonedx, generate_spdx, sign_sbom
 from backend.app.engines.security_engine import run_vulnerability_detection
 from backend.app.engines.ai_engine import classify_malicious_dependency
-from backend.app.engines.automation_engine import evaluate_policy
+from backend.app.engines.policy_engine import evaluate_policy
 
 class TestSBOMGuardEngines(unittest.TestCase):
 
@@ -71,7 +71,7 @@ class TestSBOMGuardEngines(unittest.TestCase):
         self.assertTrue(len(result["reasons"]) > 0)
 
     def test_whatif_simulation(self):
-        from backend.app.engines.ai_engine import run_whatif_simulation
+        from backend.app.engines.explanation_engine import run_whatif_simulation
         from backend.app.engines.security_engine import OFFLINE_VULN_DB
         components = [
             {

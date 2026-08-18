@@ -19,13 +19,7 @@ engine = create_engine(DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# Many-to-Many relationship table for Component Vulnerability Map
-component_vulnerabilities = Table(
-    "component_vulnerabilities_map",
-    Base.metadata,
-    Column("component_id", Integer, ForeignKey("sbom_components.id", ondelete="CASCADE"), primary_key=True),
-    Column("vulnerability_id", Integer, ForeignKey("vulnerabilities.id", ondelete="CASCADE"), primary_key=True),
-)
+
 
 class Role(Base):
     __tablename__ = "roles"
@@ -76,11 +70,19 @@ class Scan(Base):
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     status = Column(String(50), default="PENDING") # PENDING, RUNNING, COMPLETED, FAILED
+    scan_source = Column(String(50), default="local") # local, upload, github
+    github_repo_url = Column(String(500), nullable=True) # set when scan_source is 'github'
     triggered_by = Column(String(100), default="system")
     started_at = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
     log = Column(Text, nullable=True)
+    
+    # Scan Pipeline Tracking
+    current_stage = Column(String(100), nullable=True)
+    stage_status = Column(String(50), nullable=True)
+    overall_progress = Column(Integer, default=0)
+    stage_message = Column(String(500), nullable=True)
     
     project = relationship("Project", back_populates="scans")
     sboms = relationship("SBOM", back_populates="scan", cascade="all, delete-orphan")
@@ -89,6 +91,7 @@ class Scan(Base):
     remediations = relationship("RemediationRecommendation", back_populates="scan", cascade="all, delete-orphan")
     ml_predictions = relationship("MLPrediction", back_populates="scan", cascade="all, delete-orphan")
     alerts = relationship("Alert", back_populates="scan", cascade="all, delete-orphan")
+    security_findings = relationship("SecurityFinding", back_populates="scan", cascade="all, delete-orphan")
 
 class SBOM(Base):
     __tablename__ = "sboms"
@@ -113,20 +116,23 @@ class SBOMComponent(Base):
     name = Column(String(200), nullable=False, index=True)
     version = Column(String(100), nullable=False)
     ecosystem = Column(String(50), nullable=False, index=True) # npm, pypi, maven, docker
+    namespace = Column(String(200), nullable=True)
     purl = Column(String(500), nullable=False, index=True)
     supplier = Column(String(200), nullable=True)
     repository = Column(String(500), nullable=True)
+    homepage = Column(String(500), nullable=True)
     license = Column(String(100), nullable=True)
     hash_sha256 = Column(String(64), nullable=True)
     component_type = Column(String(50), default="library") # library, application, container
     depth = Column(Integer, default=0) # direct=0, transitive>0
     direct = Column(Boolean, default=True)
+    version_source = Column(String(50), nullable=True) # lockfile, manifest, inference
+    version_confidence = Column(String(50), default="UNKNOWN") # HIGH, MEDIUM, LOW, UNKNOWN
     source_file = Column(String(500), nullable=True) # manifest source
     confidence = Column(Float, default=1.0) # confidence level of identification (0.0 - 1.0)
     
     sbom = relationship("SBOM", back_populates="components")
     evidence = relationship("Evidence", back_populates="component", cascade="all, delete-orphan")
-    vulnerabilities = relationship("Vulnerability", secondary=component_vulnerabilities, back_populates="components")
 
 class Dependency(Base):
     __tablename__ = "dependencies"
@@ -139,15 +145,40 @@ class Dependency(Base):
 class Vulnerability(Base):
     __tablename__ = "vulnerabilities"
     id = Column(Integer, primary_key=True, index=True)
-    cve_id = Column(String(50), unique=True, nullable=False, index=True)
+    vulnerability_id = Column(String(100), unique=True, nullable=False, index=True)
+    aliases = Column(Text, nullable=True)
+    summary = Column(Text, nullable=True)
     cvss_score = Column(Float, nullable=True)
-    severity = Column(String(50), nullable=False) # LOW, MEDIUM, HIGH, CRITICAL
-    affected_versions = Column(Text, nullable=True) # JSON or semicolon separated string
+    severity_level = Column(String(50), nullable=True)
+    affected_versions = Column(Text, nullable=True)
     fixed_versions = Column(Text, nullable=True)
-    description = Column(Text, nullable=True)
-    references_json = Column(Text, nullable=True) # serialized list of URLs
+    known_exploited = Column(Boolean, default=False)
+    source = Column(String(50), default="OSV")
+    source_url = Column(String(500), nullable=True)
+    retrieved_at = Column(DateTime, default=datetime.utcnow)
+
+class SecurityFinding(Base):
+    __tablename__ = "security_findings"
+    id = Column(Integer, primary_key=True, index=True)
+    finding_id = Column(String(100), unique=True, nullable=False, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    scan_id = Column(Integer, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
+    component_purl = Column(String(500), nullable=False, index=True)
+    vulnerability_id = Column(String(100), ForeignKey("vulnerabilities.vulnerability_id", ondelete="CASCADE"), nullable=False)
+    status = Column(String(50), default="AFFECTED")
+    severity = Column(String(50), nullable=False)
+    cvss = Column(Float, nullable=True)
+    affected = Column(Boolean, default=True)
+    fixed_version = Column(String(100), nullable=True)
+    evidence = Column(Text, nullable=True)
+    environment = Column(String(50), default="UNKNOWN") # DEVELOPMENT, STAGING, PRODUCTION, UNKNOWN
+    internet_exposed = Column(String(50), default="unknown") # true, false, unknown
+    business_criticality = Column(String(50), default="UNKNOWN") # LOW, MEDIUM, HIGH, UNKNOWN
+    created_at = Column(DateTime, default=datetime.utcnow)
     
-    components = relationship("SBOMComponent", secondary=component_vulnerabilities, back_populates="vulnerabilities")
+    project = relationship("Project")
+    scan = relationship("Scan", back_populates="security_findings")
+    vulnerability = relationship("Vulnerability")
 
 class Anomaly(Base):
     __tablename__ = "anomalies"
@@ -171,6 +202,8 @@ class RiskAssessment(Base):
     explanation = Column(Text, nullable=True)
     blast_radius_json = Column(Text, nullable=True) # downstream impact paths
     production_exposure = Column(Boolean, default=False)
+    risk_factors = Column(Text, nullable=True) # JSON array of evidence-backed risk reasons
+    risk_calculation_version = Column(String(50), default="1.0")
     
     scan = relationship("Scan", back_populates="risk_assessments")
 
@@ -288,6 +321,17 @@ class MLPrediction(Base):
     confidence_score = Column(Float, default=1.0)
     
     scan = relationship("Scan", back_populates="ml_predictions")
+
+
+class GitHubInstallation(Base):
+    """Tracks GitHub App installations linked to this SBOMGuard instance."""
+    __tablename__ = "github_installations"
+    id = Column(Integer, primary_key=True, index=True)
+    installation_id = Column(String(50), unique=True, nullable=False, index=True)
+    account_login = Column(String(200), nullable=False)  # GitHub org/user login
+    account_type = Column(String(50), default="User")     # User or Organization
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 
 def init_db():
     Base.metadata.create_all(bind=engine)

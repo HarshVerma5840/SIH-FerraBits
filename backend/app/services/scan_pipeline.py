@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 from backend.app.models.database import (
     Scan, Project, SBOM, SBOMComponent, Dependency, Vulnerability,
     Anomaly, RiskAssessment, Ticket, Alert, AuditLog, SBOMVersion,
-    SBOMDiff, Evidence, RemediationRecommendation, MLPrediction, Policy
+    SBOMDiff, Evidence, RemediationRecommendation, MLPrediction, Policy,
+    SecurityFinding
 )
 from backend.app.engines import (
     run_repository_discovery, generate_purl, generate_cyclonedx,
@@ -19,6 +20,7 @@ from backend.app.engines import (
     detect_supply_chain_attack, detect_lifecycle_status,
     analyze_package_reputation, verify_cryptographic_integrity,
     compute_cross_project_intelligence, evaluate_contextual_security,
+    query_osv_vulnerabilities, query_osv_with_offline_fallback,
     build_dependency_graph, calculate_blast_radius, classify_license,
     run_anomaly_detection, classify_malicious_dependency,
     prioritize_risk, analyze_supply_chain_behavior,
@@ -45,11 +47,19 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
         print(msg)
         logs.append(f"[{datetime.utcnow().isoformat()}] {msg}")
         
+    def update_progress(stage_id: str, message: str, progress: int, stage_status: str = "RUNNING"):
+        scan.current_stage = stage_id
+        scan.stage_message = message
+        scan.overall_progress = progress
+        scan.stage_status = stage_status
+        db.commit()
+        log(message)
+        
     try:
-        log(f"Starting scan {scan_id} for project '{project.name}' in directory: {target_dir}")
+        update_progress("INITIALIZING", f"Starting scan {scan_id} for project '{project.name}'", 5)
         
         # 1. RUN DISCOVERY PIPELINE (Engines 1-9)
-        log("Running Repository Discovery, Language & Ecosystem detection...")
+        update_progress("DISCOVERY", "Running Repository Discovery, Language & Ecosystem detection...", 10)
         discovery_results = run_repository_discovery(target_dir)
         
         langs_found = ", ".join(discovery_results["languages"])
@@ -86,7 +96,7 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
         purl_to_vulns = {}
         
         # 2. RUN SECURITY & ML ANALYSIS PER COMPONENT (Engines 10, 15, 16, 22-28, 35-36)
-        log("Starting individual component inspection, ML predictions and vulnerability matching...")
+        update_progress("VERSION_RESOLUTION", "Starting individual component inspection and version resolution...", 30)
         for comp_data in discovery_results["components"]:
             name = comp_data["name"]
             version = comp_data.get("version", "UNKNOWN")
@@ -122,6 +132,8 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
                 component_type=comp_data.get("type", "library"),
                 depth=comp_data.get("depth", 0),
                 direct=comp_data.get("direct", True),
+                version_source=comp_data.get("version_source", "UNKNOWN"),
+                version_confidence="HIGH" if comp_data.get("version_source") == "lockfile" else ("MEDIUM" if comp_data.get("version_source") == "manifest" else "UNKNOWN"),
                 source_file=comp_data.get("source_file"),
                 confidence=comp_data["confidence"]
             )
@@ -181,33 +193,52 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
             # Run Reputation analysis (Engine 27)
             reputation_res = analyze_package_reputation(comp_data)
             
-            # Run Vulnerability Matching (Engine 19 / 20)
-            vuln_matches = run_vulnerability_detection([comp_data])
+            # ── OSV Vulnerability Intelligence (with offline fallback) ──────────
+            from backend.app.engines.security_engine import OFFLINE_VULN_DB
+            vuln_matches, vuln_source = query_osv_with_offline_fallback(
+                purl, name, version, eco, OFFLINE_VULN_DB
+            )
             comp_vulns = []
             for v_match in vuln_matches:
                 # Find or create vulnerability in global database
-                vuln_db = db.query(Vulnerability).filter_by(cve_id=v_match["cve_id"]).first()
+                vuln_db = db.query(Vulnerability).filter_by(vulnerability_id=v_match["vulnerability_id"]).first()
                 if not vuln_db:
                     vuln_db = Vulnerability(
-                        cve_id=v_match["cve_id"],
+                        vulnerability_id=v_match["vulnerability_id"],
+                        aliases=v_match["aliases"],
+                        summary=v_match["summary"],
                         cvss_score=v_match["cvss_score"],
-                        severity=v_match["severity"],
+                        severity_level=v_match["severity_level"],
                         affected_versions=v_match["affected_versions"],
                         fixed_versions=v_match["fixed_versions"],
-                        description=v_match["description"],
-                        references_json=v_match["references_json"]
+                        known_exploited=v_match["known_exploited"],
+                        source=v_match["source"],
+                        source_url=v_match["source_url"],
+                        retrieved_at=datetime.fromisoformat(v_match["retrieved_at"]) if v_match["retrieved_at"] else datetime.utcnow()
                     )
                     db.add(vuln_db)
                     db.commit()
                     db.refresh(vuln_db)
-                comp_model.vulnerabilities.append(vuln_db)
+                
+                finding = SecurityFinding(
+                    finding_id=str(uuid.uuid4()),
+                    project_id=project_id,
+                    component_purl=purl,
+                    vulnerability_id=vuln_db.vulnerability_id,
+                    severity=vuln_db.severity_level or "UNKNOWN",
+                    cvss=vuln_db.cvss_score,
+                    affected=True,
+                    evidence=f"Source: {vuln_source}"
+                )
+                scan.security_findings.append(finding)
+                
                 c_vuln = {
-                    "cve_id": vuln_db.cve_id,
+                    "cve_id": vuln_db.vulnerability_id,
                     "cvss_score": vuln_db.cvss_score,
-                    "severity": vuln_db.severity,
+                    "severity": vuln_db.severity_level,
                     "affected_versions": vuln_db.affected_versions,
                     "fixed_versions": vuln_db.fixed_versions,
-                    "description": vuln_db.description
+                    "description": vuln_db.summary
                 }
                 comp_vulns.append(c_vuln)
                 
@@ -223,7 +254,7 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
         log(f"Component security profiling complete. Map contains {len(processed_components)} entries.")
         
         # 3. BUILD ATTACK GRAPH & BLAST RADIUS (Engines 30, 31)
-        log("Building Dependency Attack Graph...")
+        update_progress("GRAPH_ANALYSIS", "Building Dependency Attack Graph...", 50)
         # Parse direct relationships if lockfile data is available
         relations = {}
         # Connect transitive dependencies to their immediate parent dependencies
@@ -252,7 +283,7 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
             db.add(dep_rel)
             
         # 4. RISK PRIORITIZATION & BLAST RADIUS CALCULATION (Engines 31, 33, 34, 37, 39, 40)
-        log("Calculating Blast Radius, VEX Context, and Risk scores...")
+        update_progress("RISK_ANALYSIS", "Calculating Blast Radius, VEX Context, and Risk scores...", 60)
         for comp_data in components_for_graph:
             purl = comp_data["purl"]
             comp_model = purl_to_comp_obj[purl]
@@ -277,7 +308,9 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
                 risk_level=risk_res["risk_level"],
                 explanation=risk_desc,
                 blast_radius_json=json.dumps(blast_radius_res),
-                production_exposure=blast_radius_res["production_exposure"]
+                production_exposure=blast_radius_res["production_exposure"],
+                risk_factors=json.dumps(risk_res.get("factors", [])),
+                risk_calculation_version="1.0"
             )
             scan.risk_assessments.append(risk_model)
             
@@ -294,6 +327,8 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
                 scan.remediations.append(rem_model)
                 
             # Policy Evaluation (Engine 48)
+            if scan.current_stage != "POLICY_EVALUATION":
+                update_progress("POLICY_EVALUATION", "Evaluating Security Policies...", 70)
             policy_eval_res = evaluate_policy(comp_data, comp_vulns, risk_res["risk_score"], policy_rules)
             comp_data["policy_action"] = policy_eval_res["action"]
             comp_data["policy_reasons"] = policy_eval_res["reasons"]
@@ -329,7 +364,7 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
                     log(f"Auto-created ticket {ticket_id} for package '{comp_data['name']}' due to {risk_res['risk_level']} risk level.")
                     
         # 5. SBOM COMPILING, SIGNING & VALIDATION (Engines 11, 12, 13, 14, 29)
-        log("Compiling SBOM documents...")
+        update_progress("SBOM_GENERATION", "Compiling and validating SBOM documents...", 80)
         # Compile relations list for SBOM
         cdx_relations = {}
         for edge in graph_data["edges"]:
@@ -444,7 +479,7 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
         )
         db.add(audit_rec)
         
-        log(f"Scan complete. Gate decision: {gate_res['status']}.")
+        update_progress("FINALIZING", f"Scan complete. Gate decision: {gate_res['status']}.", 100, "COMPLETED")
         scan.status = "COMPLETED"
         scan.completed_at = datetime.utcnow()
         scan.log = "\n".join(logs)
@@ -452,10 +487,10 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
         
     except Exception as e:
         err_msg = traceback.format_exc()
-        log(f"Pipeline error: {str(e)}\n{err_msg}")
+        update_progress("FAILED", f"Pipeline error: {str(e)}", scan.overall_progress, "FAILED")
         scan.status = "FAILED"
         scan.completed_at = datetime.utcnow()
-        scan.log = "\n".join(logs)
+        scan.log = "\n".join(logs) + f"\n{err_msg}"
         db.commit()
         
         audit_rec = AuditLog(

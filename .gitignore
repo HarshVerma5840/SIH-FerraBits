@@ -148,3 +148,7 @@ Thumbs.db
 backend/app/temp_scans/
 temp_scans/
 temp_test_manifests/
+
+# GitHub App secrets & extracted code
+*.pem
+extracted_code/

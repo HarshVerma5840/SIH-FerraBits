@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from backend.app.core.security import get_db, get_current_user
 from backend.app.models.database import Scan, Project, AuditLog
 from backend.app.services.scan_pipeline import run_scan_pipeline
+from backend.app.services.github_app import get_installation_token
+from backend.app.services.code_fetcher import CodeFetcher
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/scans", tags=["Scans"])
@@ -17,6 +19,13 @@ TEMP_SCAN_BASE = r"C:\Users\5430\.gemini\antigravity\temp_scans"
 class LocalScanRequest(BaseModel):
     project_id: int
     directory_path: str
+
+class GitHubScanRequest(BaseModel):
+    project_id: int
+    installation_id: str
+    owner: str
+    repo: str
+    branch: str = "main"
 
 @router.post("/upload")
 def upload_and_scan(
@@ -59,6 +68,7 @@ def upload_and_scan(
     scan = Scan(
         project_id=project_id,
         status="PENDING",
+        scan_source="upload",
         triggered_by=current_user.username
     )
     db.add(scan)
@@ -102,6 +112,7 @@ def scan_local_directory(
     scan = Scan(
         project_id=data.project_id,
         status="PENDING",
+        scan_source="local",
         triggered_by=current_user.username
     )
     db.add(scan)
@@ -135,6 +146,10 @@ def get_scan_status(scan_id: int, db: Session = Depends(get_db), current_user = 
     return {
         "id": scan.id,
         "status": scan.status,
+        "current_stage": scan.current_stage,
+        "stage_status": scan.stage_status,
+        "stage_message": scan.stage_message,
+        "overall_progress": scan.overall_progress,
         "started_at": scan.started_at,
         "completed_at": scan.completed_at
     }
@@ -152,3 +167,82 @@ def run_scan_pipeline_and_cleanup(project_id, scan_id, target_dir, db):
     finally:
         # Cleanup uploaded files after scanning completes
         shutil.rmtree(target_dir, ignore_errors=True)
+
+
+# ──────────────────────────── GitHub Scan ────────────────────────────
+
+@router.post("/github")
+def scan_github_repo(
+    background_tasks: BackgroundTasks,
+    data: GitHubScanRequest,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Scan a GitHub repository directly via the GitHub App integration.
+    Fetches source code from GitHub, saves it locally, then runs the full scan pipeline.
+    """
+    project = db.query(Project).get(data.project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    repo_url = f"https://github.com/{data.owner}/{data.repo}"
+
+    # Create Scan Record
+    scan = Scan(
+        project_id=data.project_id,
+        status="PENDING",
+        scan_source="github",
+        github_repo_url=repo_url,
+        triggered_by=current_user.username
+    )
+    db.add(scan)
+    db.commit()
+    db.refresh(scan)
+
+    # Audit log
+    audit_rec = AuditLog(
+        username=current_user.username,
+        action="scan_triggered",
+        details=f"Triggered GitHub scan {scan.id} for '{data.owner}/{data.repo}' (branch: {data.branch}) on project '{project.name}'",
+        ip_address="127.0.0.1"
+    )
+    db.add(audit_rec)
+    db.commit()
+
+    # Schedule GitHub fetch + scan pipeline in background
+    background_tasks.add_task(
+        _run_github_scan_and_cleanup,
+        data.project_id, scan.id,
+        data.installation_id, data.owner, data.repo, data.branch,
+        db
+    )
+
+    return {
+        "scan_id": scan.id,
+        "status": "PENDING",
+        "message": f"GitHub scan scheduled for {data.owner}/{data.repo} (branch: {data.branch})"
+    }
+
+
+def _run_github_scan_and_cleanup(
+    project_id: int, scan_id: int,
+    installation_id: str, owner: str, repo: str, branch: str,
+    db: Session
+):
+    """Background task: fetch code from GitHub, run scan pipeline, then cleanup."""
+    fetcher = CodeFetcher()
+    scan_uuid = f"github_{scan_id}_{uuid.uuid4().hex[:8]}"
+
+    try:
+        # 1. Get installation token and fetch code
+        token = get_installation_token(installation_id)
+        code_index = fetcher.fetch_from_github(scan_uuid, token, owner, repo, branch)
+
+        # 2. Run the scan pipeline on the fetched code
+        target_dir = os.path.join(fetcher.extraction_base_path, scan_uuid)
+        run_scan_pipeline(project_id, scan_id, target_dir, db)
+
+    finally:
+        # 3. Cleanup extracted code
+        fetcher.cleanup(scan_uuid)
