@@ -2,7 +2,7 @@ import uuid
 import json
 import hashlib
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import quote
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
@@ -39,7 +39,7 @@ def generate_purl(ecosystem, name, version):
 def generate_cyclonedx(project_name, components, dependencies_relations=None):
     """Engine 11: SBOM Generation Engine (CycloneDX)"""
     bom_uuid = f"urn:uuid:{uuid.uuid4()}"
-    timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     
     cdx_components = []
     for c in components:
@@ -100,7 +100,7 @@ def generate_cyclonedx(project_name, components, dependencies_relations=None):
 
 def generate_spdx(project_name, components):
     """Engine 11: SBOM Generation Engine (SPDX)"""
-    timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     spdx_id = f"SPDXRef-DOCUMENT"
     
     spdx_packages = []

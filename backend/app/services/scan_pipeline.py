@@ -3,7 +3,7 @@ import json
 import uuid
 import hashlib
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from backend.app.models.database import (
@@ -37,13 +37,13 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
         return
         
     scan.status = "RUNNING"
-    scan.started_at = datetime.utcnow()
+    scan.started_at = datetime.now(timezone.utc)
     db.commit()
     
     logs = []
     def log(msg):
         print(msg)
-        logs.append(f"[{datetime.utcnow().isoformat()}] {msg}")
+        logs.append(f"[{datetime.now(timezone.utc).isoformat()}] {msg}")
         
     try:
         log(f"Starting scan {scan_id} for project '{project.name}' in directory: {target_dir}")
@@ -84,6 +84,9 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
         # Map purls to component models and vulns
         purl_to_comp_obj = {}
         purl_to_vulns = {}
+        
+        # Fetch all existing vulnerabilities to optimize database lookups and prevent lock contention
+        existing_vulns = {v.cve_id: v for v in db.query(Vulnerability).all()}
         
         # 2. RUN SECURITY & ML ANALYSIS PER COMPONENT (Engines 10, 15, 16, 22-28, 35-36)
         log("Starting individual component inspection, ML predictions and vulnerability matching...")
@@ -185,11 +188,11 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
             vuln_matches = run_vulnerability_detection([comp_data])
             comp_vulns = []
             for v_match in vuln_matches:
-                # Find or create vulnerability in global database
-                vuln_db = db.query(Vulnerability).filter_by(cve_id=v_match["cve_id"]).first()
+                cve = v_match["cve_id"]
+                vuln_db = existing_vulns.get(cve)
                 if not vuln_db:
                     vuln_db = Vulnerability(
-                        cve_id=v_match["cve_id"],
+                        cve_id=cve,
                         cvss_score=v_match["cvss_score"],
                         severity=v_match["severity"],
                         affected_versions=v_match["affected_versions"],
@@ -198,8 +201,7 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
                         references_json=v_match["references_json"]
                     )
                     db.add(vuln_db)
-                    db.commit()
-                    db.refresh(vuln_db)
+                    existing_vulns[cve] = vuln_db
                 comp_model.vulnerabilities.append(vuln_db)
                 c_vuln = {
                     "cve_id": vuln_db.cve_id,
@@ -242,14 +244,10 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
                     
         graph_data = build_dependency_graph(components_for_graph, relations)
         
-        # Save relations in Dependency table
+        # Keep relations in memory to save post-SBOM insertion
+        pending_dependencies = []
         for edge in graph_data["edges"]:
-            dep_rel = Dependency(
-                sbom_id=0, # Will be set post-SBOM insertion
-                component_purl=edge["target"],
-                dependent_purl=edge["source"]
-            )
-            db.add(dep_rel)
+            pending_dependencies.append((edge["target"], edge["source"]))
             
         # 4. RISK PRIORITIZATION & BLAST RADIUS CALCULATION (Engines 31, 33, 34, 37, 39, 40)
         log("Calculating Blast Radius, VEX Context, and Risk scores...")
@@ -294,7 +292,7 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
                 scan.remediations.append(rem_model)
                 
             # Policy Evaluation (Engine 48)
-            policy_eval_res = evaluate_policy(comp_data, comp_vulns, risk_res["risk_score"], policy_rules)
+            policy_eval_res = evaluate_policy(comp_data, comp_vulns, policy_rules)
             comp_data["policy_action"] = policy_eval_res["action"]
             comp_data["policy_reasons"] = policy_eval_res["reasons"]
             comp_data["remediation_recommendation"] = remediation_res
@@ -372,8 +370,14 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
         db.commit()
         db.refresh(sbom_model)
         
-        # Update Dependency links with active sbom_id
-        db.query(Dependency).filter_by(sbom_id=0).update({"sbom_id": sbom_model.id})
+        # Save Dependency links with active sbom_id directly
+        for target, source in pending_dependencies:
+            dep_rel = Dependency(
+                sbom_id=sbom_model.id,
+                component_purl=target,
+                dependent_purl=source
+            )
+            db.add(dep_rel)
         db.commit()
         
         # Calculate SBOM Quality (Engine 14)
@@ -446,7 +450,7 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
         
         log(f"Scan complete. Gate decision: {gate_res['status']}.")
         scan.status = "COMPLETED"
-        scan.completed_at = datetime.utcnow()
+        scan.completed_at = datetime.now(timezone.utc)
         scan.log = "\n".join(logs)
         db.commit()
         
@@ -454,7 +458,7 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
         err_msg = traceback.format_exc()
         log(f"Pipeline error: {str(e)}\n{err_msg}")
         scan.status = "FAILED"
-        scan.completed_at = datetime.utcnow()
+        scan.completed_at = datetime.now(timezone.utc)
         scan.log = "\n".join(logs)
         db.commit()
         

@@ -1,4 +1,79 @@
-def evaluate_policy(component, vulnerabilities, risk_score, policy_rules):
+def _evaluate_cvss(vulnerabilities, policy_rules, reasons):
+    if not vulnerabilities:
+        return "PASS"
+    max_cvss = max([v["cvss_score"] for v in vulnerabilities if v.get("cvss_score")] or [0])
+    action = "PASS"
+    for rule in policy_rules:
+        if rule["rule_type"] != "CVSS_THRESHOLD":
+            continue
+        cond = rule["condition"]
+        rule_act = rule["action"]
+        if not cond.startswith(">="):
+            continue
+        val = float(cond.replace(">=", "").strip())
+        if max_cvss < val:
+            continue
+        reasons.append(f"Vulnerability CVSS score {max_cvss} triggers {rule_act} rule ({cond})")
+        if rule_act == "BLOCK":
+            action = "BLOCK"
+        elif rule_act == "REVIEW" and action != "BLOCK":
+            action = "REVIEW"
+    return action
+
+def _evaluate_anomaly(component, policy_rules, reasons):
+    ai_score = component.get("anomaly_score", 0)
+    action = "PASS"
+    for rule in policy_rules:
+        if rule["rule_type"] != "AI_ANOMALY":
+            continue
+        cond = rule["condition"]
+        rule_act = rule["action"]
+        if not cond.startswith(">="):
+            continue
+        val = float(cond.replace(">=", "").strip())
+        if ai_score < val:
+            continue
+        reasons.append(f"AI Anomaly score {ai_score} triggers {rule_act} rule ({cond})")
+        if rule_act == "BLOCK":
+            action = "BLOCK"
+        elif rule_act == "REVIEW" and action != "BLOCK":
+            action = "REVIEW"
+    return action
+
+def _evaluate_license(component, policy_rules, reasons):
+    action = "PASS"
+    license_class = component.get("license_classification", "PERMISSIVE")
+    for rule in policy_rules:
+        if rule["rule_type"] != "FORBIDDEN_LICENSE":
+            continue
+        cond = rule["condition"]
+        rule_act = rule["action"]
+        if cond != "FORBIDDEN" or license_class != "FORBIDDEN":
+            continue
+        reasons.append(f"Forbidden copyleft license triggers {rule_act}")
+        if rule_act == "BLOCK":
+            action = "BLOCK"
+        elif rule_act == "REVIEW" and action != "BLOCK":
+            action = "REVIEW"
+    return action
+
+def _evaluate_version(component, policy_rules, reasons):
+    action = "PASS"
+    version = component.get("version", "UNKNOWN")
+    for rule in policy_rules:
+        if rule["rule_type"] != "UNKNOWN_VERSION":
+            continue
+        rule_act = rule["action"]
+        if version not in ("UNKNOWN", "unknown"):
+            continue
+        reasons.append(f"Unknown component version triggers {rule_act}")
+        if rule_act == "BLOCK":
+            action = "BLOCK"
+        elif rule_act == "REVIEW" and action != "BLOCK":
+            action = "REVIEW"
+    return action
+
+def evaluate_policy(component, vulnerabilities, policy_rules):
     """
     Engine 48: Policy Evaluation Engine
     Engine 54: Policy-as-Code Engine
@@ -14,66 +89,22 @@ def evaluate_policy(component, vulnerabilities, risk_score, policy_rules):
             {"rule_type": "UNKNOWN_VERSION", "condition": "UNKNOWN", "action": "REVIEW"}
         ]
         
-    action = "PASS"
     reasons = []
     
-    # 1. Check CVSS / Severity thresholds
-    if vulnerabilities:
-        max_cvss = max([v["cvss_score"] for v in vulnerabilities if v.get("cvss_score")] or [0])
-        for rule in policy_rules:
-            if rule["rule_type"] == "CVSS_THRESHOLD":
-                cond = rule["condition"]
-                rule_act = rule["action"]
-                # Parse condition e.g. ">= 9.0"
-                if cond.startswith(">="):
-                    val = float(cond.replace(">=", "").strip())
-                    if max_cvss >= val:
-                        reasons.append(f"Vulnerability CVSS score {max_cvss} triggers {rule_act} rule ({cond})")
-                        if rule_act == "BLOCK":
-                            action = "BLOCK"
-                        elif rule_act == "REVIEW" and action != "BLOCK":
-                            action = "REVIEW"
-                            
-    # 2. Check AI anomaly threshold
-    ai_score = component.get("anomaly_score", 0)
-    for rule in policy_rules:
-        if rule["rule_type"] == "AI_ANOMALY":
-            cond = rule["condition"]
-            rule_act = rule["action"]
-            if cond.startswith(">="):
-                val = float(cond.replace(">=", "").strip())
-                if ai_score >= val:
-                    reasons.append(f"AI Anomaly score {ai_score} triggers {rule_act} rule ({cond})")
-                    if rule_act == "BLOCK":
-                        action = "BLOCK"
-                    elif rule_act == "REVIEW" and action != "BLOCK":
-                        action = "REVIEW"
-                        
-    # 3. Check Forbidden licenses
-    license_class = component.get("license_classification", "PERMISSIVE")
-    for rule in policy_rules:
-        if rule["rule_type"] == "FORBIDDEN_LICENSE":
-            cond = rule["condition"]
-            rule_act = rule["action"]
-            if cond == "FORBIDDEN" and license_class == "FORBIDDEN":
-                reasons.append(f"Forbidden copyleft license triggers {rule_act}")
-                if rule_act == "BLOCK":
-                    action = "BLOCK"
-                elif rule_act == "REVIEW" and action != "BLOCK":
-                    action = "REVIEW"
-                    
-    # 4. Check Unknown versions
-    version = component.get("version", "UNKNOWN")
-    for rule in policy_rules:
-        if rule["rule_type"] == "UNKNOWN_VERSION":
-            rule_act = rule["action"]
-            if version == "UNKNOWN" or version == "unknown":
-                reasons.append(f"Unknown component version triggers {rule_act}")
-                if rule_act == "BLOCK":
-                    action = "BLOCK"
-                elif rule_act == "REVIEW" and action != "BLOCK":
-                    action = "REVIEW"
-                    
+    cvss_action = _evaluate_cvss(vulnerabilities, policy_rules, reasons)
+    anomaly_action = _evaluate_anomaly(component, policy_rules, reasons)
+    license_action = _evaluate_license(component, policy_rules, reasons)
+    version_action = _evaluate_version(component, policy_rules, reasons)
+    
+    # Aggregate action: BLOCK > REVIEW > PASS
+    actions = [cvss_action, anomaly_action, license_action, version_action]
+    if "BLOCK" in actions:
+        action = "BLOCK"
+    elif "REVIEW" in actions:
+        action = "REVIEW"
+    else:
+        action = "PASS"
+        
     return {
         "action": action,
         "reasons": reasons

@@ -4,34 +4,20 @@ import time
 import argparse
 import requests
 
-def main():
+def parse_arguments():
     parser = argparse.ArgumentParser(description="SBOMGuard AI Security Gate CLI")
     parser.add_argument("--api-url", default="http://localhost:8000", help="URL of the SBOMGuard backend API")
     parser.add_argument("--project-id", type=int, default=1, help="Target project ID inside the platform")
     parser.add_argument("--path", default=".", help="Path to local folder/repository manifest root")
     parser.add_argument("--token", help="JWT Authentication token (optional)")
-    
-    args = parser.parse_args()
-    
-    # 1. Resolve path
-    target_path = os.path.abspath(args.path)
-    if not os.path.exists(target_path):
-        print(f"[ERROR] Specified scan path does not exist: {target_path}")
-        sys.exit(3)
-        
-    print(f"[*] Initializing SBOMGuard compliance check for path: {target_path}")
-    
-    headers = {}
-    if args.token:
-        headers["Authorization"] = f"Bearer {args.token}"
-        
-    # 2. Trigger scan
-    url = f"{args.api_url}/api/scans/local"
+    return parser.parse_args()
+
+def trigger_scan(api_url, project_id, target_path, headers):
+    url = f"{api_url}/api/scans/local"
     payload = {
-        "project_id": args.project_id,
+        "project_id": project_id,
         "directory_path": target_path
     }
-    
     try:
         r = requests.post(url, json=payload, headers=headers)
         if r.status_code != 200:
@@ -40,18 +26,18 @@ def main():
         data = r.json()
         scan_id = data["scan_id"]
         print(f"[*] Scan scheduled successfully. Scan ID: {scan_id}")
+        return scan_id
     except Exception as e:
-        print(f"[ERROR] Backend API unreachable at {args.api_url}: {str(e)}")
+        print(f"[ERROR] Backend API unreachable at {api_url}: {str(e)}")
         sys.exit(3)
-        
-    # 3. Poll status
+
+def poll_scan_status(api_url, scan_id, headers):
     status = "PENDING"
     print("[*] Polling scan status in background...")
-    
     while status in ["PENDING", "RUNNING"]:
         time.sleep(2)
         try:
-            r = requests.get(f"{args.api_url}/api/scans/{scan_id}/status", headers=headers)
+            r = requests.get(f"{api_url}/api/scans/{scan_id}/status", headers=headers)
             if r.status_code == 200:
                 status = r.json()["status"]
                 print(f"    - Current scan status: {status}")
@@ -62,44 +48,34 @@ def main():
             
     if status == "FAILED":
         print("[ERROR] Scan pipeline execution failed on backend.")
-        # Retrieve logs for explanation
         try:
-            r = requests.get(f"{args.api_url}/api/scans/{scan_id}/logs", headers=headers)
+            r = requests.get(f"{api_url}/api/scans/{scan_id}/logs", headers=headers)
             if r.status_code == 200:
                 print("\nBackend Logs:")
                 print(r.json()["logs"])
         except Exception:
             pass
         sys.exit(3)
-        
-    # 4. Fetch details to evaluate gate decision
+    return status
+
+def fetch_project_details(api_url, project_id, headers):
     print("[*] Scan completed. Retrieving policy evaluation and security gate decision...")
     try:
-        r = requests.get(f"{args.api_url}/api/projects/{args.project_id}", headers=headers)
+        r = requests.get(f"{api_url}/api/projects/{project_id}", headers=headers)
         if r.status_code != 200:
             print(f"[ERROR] Failed to fetch project details: {r.text}")
             sys.exit(3)
-        details = r.json()
+        return r.json()
     except Exception as e:
         print(f"[ERROR] Failed to connect to API: {str(e)}")
         sys.exit(3)
-        
-    # 5. Format developer feedback report
-    components = details.get("components", [])
-    violations = [c for c in components if c.get("risk_level") in ["HIGH", "CRITICAL"] or c.get("anomaly_score", 0) >= 60]
-    
-    print("\n" + "="*60)
-    print(" SBOMGUARD SECURITY GATE REPORT")
-    print("="*60)
-    
+
+def evaluate_compliance_gate(components):
     exit_code = 0
     blocked_packages = []
     reviewed_packages = []
     
     for c in components:
-        # Determine client-side gate decision based on risk/vulnerabilities
-        # Match backend policy triggers
-        rule_triggered = False
         reasons = []
         action = "PASS"
         
@@ -125,6 +101,13 @@ def main():
             if exit_code != 2:
                 exit_code = 1
                 
+    return exit_code, blocked_packages, reviewed_packages
+
+def print_gate_report(exit_code, blocked_packages, reviewed_packages):
+    print("\n" + "="*60)
+    print(" SBOMGUARD SECURITY GATE REPORT")
+    print("="*60)
+    
     if exit_code == 0:
         print("\n[SUCCESS] All packages conformed to compliance policies. Build passed.")
     else:
@@ -142,9 +125,37 @@ def main():
                     print(f"    Reason: {r}")
                     
     print("\n" + "="*60)
-    print(f" FINAL RESULT: {'PASSED' if exit_code == 0 else ('WARNING (REVIEW)' if exit_code == 1 else 'FAILED (BLOCKED)')}")
+    if exit_code == 0:
+        result_str = 'PASSED'
+    elif exit_code == 1:
+        result_str = 'WARNING (REVIEW)'
+    else:
+        result_str = 'FAILED (BLOCKED)'
+    print(f" FINAL RESULT: {result_str}")
     print(f" Exit Code: {exit_code}")
     print("="*60)
+
+def main():
+    args = parse_arguments()
+    
+    target_path = os.path.abspath(args.path)
+    if not os.path.exists(target_path):
+        print(f"[ERROR] Specified scan path does not exist: {target_path}")
+        sys.exit(3)
+        
+    print(f"[*] Initializing SBOMGuard compliance check for path: {target_path}")
+    
+    headers = {}
+    if args.token:
+        headers["Authorization"] = f"Bearer {args.token}"
+        
+    scan_id = trigger_scan(args.api_url, args.project_id, target_path, headers)
+    poll_scan_status(args.api_url, scan_id, headers)
+    details = fetch_project_details(args.api_url, args.project_id, headers)
+    
+    components = details.get("components", [])
+    exit_code, blocked_packages, reviewed_packages = evaluate_compliance_gate(components)
+    print_gate_report(exit_code, blocked_packages, reviewed_packages)
     
     sys.exit(exit_code)
 

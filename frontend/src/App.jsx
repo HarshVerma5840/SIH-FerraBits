@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Shield, Database, AlertTriangle, FileText, Settings, Activity, 
-  GitBranch, RefreshCw, Upload, CheckCircle, XCircle, Search, 
-  Sliders, ArrowRight, User, Key, Layers, Download, Check, HelpCircle
+  Shield, Database, AlertTriangle, FileText, Activity, 
+  GitBranch, RefreshCw, Upload, XCircle, Search, 
+  Sliders, ArrowRight, Layers, Download, Check, HelpCircle
 } from 'lucide-react';
 
 const API_BASE = "http://localhost:8000";
@@ -40,7 +40,385 @@ const MOCK_POLICIES = [
   { id: 4, name: "Block Copyleft Licenses", rule_type: "FORBIDDEN_LICENSE", rule_condition: "FORBIDDEN", action: "BLOCK", is_active: true }
 ];
 
+const getRiskBadgeClass = (riskLevel) => {
+  if (riskLevel === 'CRITICAL') return 'badge-critical';
+  if (riskLevel === 'HIGH') return 'badge-high';
+  return 'badge-low';
+};
+
+const getTicketStatusBadgeStyle = (status) => {
+  if (status === 'OPEN') {
+    return {
+      background: 'rgba(239, 68, 68, 0.1)',
+      color: 'var(--critical)'
+    };
+  }
+  if (status === 'IN_PROGRESS') {
+    return {
+      background: 'rgba(234, 179, 8, 0.1)',
+      color: 'var(--medium)'
+    };
+  }
+  return {
+    background: 'rgba(16, 185, 129, 0.1)',
+    color: 'var(--low)'
+  };
+};
+
+function AuthScreen({
+  authMode, setAuthMode,
+  authUsername, setAuthUsername,
+  authPassword, setAuthPassword,
+  authEmail, setAuthEmail,
+  authRole, setAuthRole,
+  authError, setAuthError,
+  handleLogin, handleRegister,
+  setIsOfflineMode, setProjects, setTickets, setAuditLogs, setPolicies,
+  MOCK_PROJECTS, MOCK_TICKETS, MOCK_AUDIT, MOCK_POLICIES
+}) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#0b0f19', color: 'white', padding: '20px', fontFamily: 'system-ui, sans-serif' }}>
+      <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '32px', background: 'rgba(15, 23, 42, 0.45)', border: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', flexDirection: 'column', gap: '24px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.8), 0 10px 10px -5px rgba(0, 0, 0, 0.8)' }}>
+        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <Shield size={36} color="var(--primary)" />
+            <h2 style={{ fontSize: '1.8rem', fontWeight: 800 }}>SBOMGuard AI</h2>
+          </div>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+            {authMode === "login" ? "Sign in to manage supply chain security" : "Register a new compliance account"}
+          </p>
+        </div>
+
+        {authError && (
+          <div style={{ padding: '10px 14px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--critical)', color: 'var(--critical)', fontSize: '0.85rem' }}>
+            {authError}
+          </div>
+        )}
+
+        <form onSubmit={authMode === "login" ? handleLogin : handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div>
+            <label htmlFor="auth-username-input" style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '6px' }}>Username</label>
+            <input 
+              id="auth-username-input"
+              type="text" 
+              required
+              placeholder="Enter username" 
+              value={authUsername}
+              onChange={(e) => setAuthUsername(e.target.value)}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: '#05070c', border: '1px solid var(--border-color)', color: 'white' }}
+            />
+          </div>
+
+          {authMode === "register" && (
+            <div>
+              <label htmlFor="auth-email-input" style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '6px' }}>Email Address</label>
+              <input 
+                id="auth-email-input"
+                type="email" 
+                placeholder="Enter email (optional)" 
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: '#05070c', border: '1px solid var(--border-color)', color: 'white' }}
+              />
+            </div>
+          )}
+
+          <div>
+            <label htmlFor="auth-password-input" style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '6px' }}>Password</label>
+            <input 
+              id="auth-password-input"
+              type="password" 
+              required
+              placeholder="Enter password" 
+              value={authPassword}
+              onChange={(e) => setAuthPassword(e.target.value)}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: '#05070c', border: '1px solid var(--border-color)', color: 'white' }}
+            />
+          </div>
+
+          {authMode === "register" && (
+            <div>
+              <label htmlFor="auth-role-select" style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '6px' }}>Select Role</label>
+              <select 
+                id="auth-role-select"
+                value={authRole}
+                onChange={(e) => setAuthRole(e.target.value)}
+                style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#05070c', border: '1px solid var(--border-color)', color: 'white' }}
+              >
+                <option value="DEVELOPER">DEVELOPER (Scan, View Policies, Tickets)</option>
+                <option value="VIEWER">VIEWER (View Dashboard only)</option>
+              </select>
+            </div>
+          )}
+
+          <button type="submit" className="btn-primary" style={{ padding: '12px', width: '100%', justifyContent: 'center', marginTop: '8px' }}>
+            {authMode === "login" ? "Sign In" : "Register Account"}
+          </button>
+        </form>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', fontSize: '0.85rem' }}>
+          <span style={{ color: 'var(--text-muted)' }}>
+            {authMode === "login" ? "Don't have an account?" : "Already have an account?"}
+            <button 
+              type="button" 
+              onClick={() => {
+                setAuthMode(authMode === "login" ? "register" : "login");
+                setAuthError("");
+              }} 
+              style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 600, cursor: 'pointer', marginLeft: '6px', padding: 0 }}
+            >
+              {authMode === "login" ? "Create one" : "Sign in here"}
+            </button>
+          </span>
+
+          <span style={{ color: 'var(--text-muted)' }}>or</span>
+
+          <button 
+            type="button"
+            className="btn-secondary" 
+            onClick={() => {
+              setIsOfflineMode(true);
+              setProjects(MOCK_PROJECTS);
+              setTickets(MOCK_TICKETS);
+              setAuditLogs(MOCK_AUDIT);
+              setPolicies(MOCK_POLICIES);
+            }}
+            style={{ width: '100%', justifyContent: 'center', padding: '10px', borderRadius: '6px' }}
+          >
+            Enter Offline Demo Mode
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DashboardTab({ stats, projects, getRiskBadgeClass, setSelectedProjectId, setActiveTab }) {
+  return (
+    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+      <div className="metrics-grid">
+        <div className="glass-panel" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div style={{ padding: '16px', borderRadius: '12px', background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+            <Database size={28} color="var(--primary)" />
+          </div>
+          <div>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Scanned Projects</span>
+            <h3 style={{ fontSize: '1.8rem', marginTop: '4px' }}>{stats.totalProjects}</h3>
+          </div>
+        </div>
+
+        <div className="glass-panel" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div style={{ padding: '16px', borderRadius: '12px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+            <Layers size={28} color="var(--info)" />
+          </div>
+          <div>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Analyzed Dependencies</span>
+            <h3 style={{ fontSize: '1.8rem', marginTop: '4px' }}>{stats.totalDeps}</h3>
+          </div>
+        </div>
+
+        <div className="glass-panel" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div style={{ padding: '16px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+            <AlertTriangle size={28} color="var(--critical)" />
+          </div>
+          <div>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Unresolved Vulnerabilities</span>
+            <h3 style={{ fontSize: '1.8rem', marginTop: '4px', color: stats.totalCritical > 0 ? 'var(--critical)' : 'inherit' }}>
+              {stats.totalCritical} <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Critical / {stats.totalHigh} High</span>
+            </h3>
+          </div>
+        </div>
+
+        <div className="glass-panel" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div style={{ padding: '16px', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+            <Activity size={28} color="var(--low)" />
+          </div>
+          <div>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Avg SBOM Quality Score</span>
+            <h3 style={{ fontSize: '1.8rem', marginTop: '4px', color: 'var(--low)' }}>{stats.avgQuality}%</h3>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '24px' }}>
+        <section className="glass-panel" style={{ padding: '24px' }}>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '20px' }}>Historical SBOM Completeness & Quality</h3>
+          <div style={{ width: '100%', height: '240px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', padding: '10px 20px', borderBottom: '1px solid var(--border-color)', position: 'relative' }}>
+            <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+              <line x1="0" y1="20%" x2="100%" y2="20%" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
+              <line x1="0" y1="50%" x2="100%" y2="50%" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
+              <line x1="0" y1="80%" x2="100%" y2="80%" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
+            </svg>
+            
+            <svg viewBox="0 0 500 200" style={{ width: '100%', height: '100%' }}>
+              <defs>
+                <linearGradient id="gradient-area" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#6366f1" stopOpacity="0.4" />
+                  <stop offset="100%" stopColor="#6366f1" stopOpacity="0.0" />
+                </linearGradient>
+              </defs>
+              <path 
+                d="M 50 140 Q 150 90 250 80 T 450 40 L 450 200 L 50 200 Z" 
+                fill="url(#gradient-area)" 
+              />
+              <path 
+                d="M 50 140 Q 150 90 250 80 T 450 40" 
+                fill="none" 
+                stroke="#6366f1" 
+                strokeWidth="4" 
+                strokeLinecap="round"
+              />
+              <circle cx="50" cy="140" r="5" fill="#ffffff" stroke="#6366f1" strokeWidth="2" />
+              <circle cx="180" cy="115" r="5" fill="#ffffff" stroke="#6366f1" strokeWidth="2" />
+              <circle cx="310" cy="75" r="5" fill="#ffffff" stroke="#6366f1" strokeWidth="2" />
+              <circle cx="450" cy="40" r="5" fill="#ffffff" stroke="#6366f1" strokeWidth="2" />
+              
+              <text x="40" y="165" fill="var(--text-muted)" fontSize="10">Scan v1 (70%)</text>
+              <text x="170" y="140" fill="var(--text-muted)" fontSize="10">Scan v2 (78%)</text>
+              <text x="300" y="98" fill="var(--text-muted)" fontSize="10">Scan v3 (85%)</text>
+              <text x="410" y="25" fill="var(--low)" fontSize="10" fontWeight="bold">Scan v4 (94%)</text>
+            </svg>
+          </div>
+        </section>
+
+        <section className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+          <h3 style={{ fontSize: '1.1rem' }}>Active Risk Disclosures</h3>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '160px', position: 'relative' }}>
+            <svg viewBox="0 0 36 36" style={{ width: '130px', height: '130px' }}>
+              <circle cx="18" cy="18" r="15.915" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="3" />
+              <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--critical)" strokeWidth="3.2" 
+                strokeDasharray="20 80" strokeDashoffset="25" 
+              />
+              <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--high)" strokeWidth="3.2" 
+                strokeDasharray="30 70" strokeDashoffset="5" 
+              />
+              <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--medium)" strokeWidth="3.2" 
+                strokeDasharray="15 85" strokeDashoffset="75" 
+              />
+              <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--low)" strokeWidth="3.2" 
+                strokeDasharray="35 65" strokeDashoffset="90" 
+              />
+            </svg>
+            <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <span style={{ fontSize: '1.6rem', fontWeight: 800 }}>10</span>
+              <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>VULNS</span>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.8rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--critical)' }} />
+              <span>Critical: 2</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--high)' }} />
+              <span>High: 3</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--medium)' }} />
+              <span>Medium: 1</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--low)' }} />
+              <span>Low: 4</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <section className="glass-panel" style={{ padding: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h3 style={{ fontSize: '1.1rem' }}>Active Projects Monitoring</h3>
+          <button type="button" className="btn-primary" onClick={() => setActiveTab("projects")}>
+            Register & Scan <ArrowRight size={16} />
+          </button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+          {projects.map(p => (
+            <div key={p.id} className="glass-panel" style={{ padding: '20px', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <h4 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{p.name}</h4>
+                <span className={`badge ${getRiskBadgeClass(p.risk_level)}`}>{p.risk_level} RISK</span>
+              </div>
+              
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', height: '40px', overflow: 'hidden' }}>{p.description}</p>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Vulnerabilities: </span>
+                  <span style={{ fontWeight: 700, color: p.vulnerability_count > 0 ? 'var(--critical)' : 'inherit' }}>{p.vulnerability_count}</span>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Quality: </span>
+                  <span style={{ fontWeight: 700, color: 'var(--low)' }}>{p.quality_score}%</span>
+                </div>
+                <button 
+                  type="button"
+                  className="btn-secondary" 
+                  onClick={() => { setSelectedProjectId(p.id); setActiveTab("projects"); }}
+                  style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                >
+                  Inspect SBOM
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function AuditLogsTab({ auditLogs }) {
+  return (
+    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <h3 style={{ fontSize: '1.4rem' }}>Security Operations Audit Trail</h3>
+      
+      <div className="glass-panel" style={{ padding: '24px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', overflow: 'hidden', textAlign: 'left' }}>
+          <thead>
+            <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border-color)' }}>
+              <th style={{ padding: '16px' }}>Timestamp</th>
+              <th style={{ padding: '16px' }}>Operator</th>
+              <th style={{ padding: '16px' }}>Compliance Action</th>
+              <th style={{ padding: '16px' }}>Action details</th>
+              <th style={{ padding: '16px' }}>Client IP</th>
+            </tr>
+          </thead>
+          <tbody>
+            {auditLogs.map((l, i) => (
+              <tr key={l.id || `${l.timestamp}-${l.action}-${i}`} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                <td style={{ padding: '16px' }} className="mono-text">{new Date(l.timestamp).toLocaleString()}</td>
+                <td style={{ padding: '16px', fontWeight: 'bold' }}>{l.username}</td>
+                <td style={{ padding: '16px' }}>
+                  <span style={{ 
+                    padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700,
+                    background: l.action.includes('fail') || l.action.includes('block') ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                    color: l.action.includes('fail') || l.action.includes('block') ? 'var(--critical)' : 'var(--low)'
+                  }}>{l.action.toUpperCase()}</span>
+                </td>
+                <td style={{ padding: '16px', fontSize: '0.85rem' }}>{l.details}</td>
+                <td style={{ padding: '16px' }} className="mono-text">{l.ip_address}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  const [token, setToken] = useState(localStorage.getItem("sbomguard_token") || "");
+  const [user, setUser] = useState(null);
+  const [authMode, setAuthMode] = useState("login");
+  const [authUsername, setAuthUsername] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authRole, setAuthRole] = useState("DEVELOPER");
+  const [authError, setAuthError] = useState("");
+
   const [activeTab, setActiveTab] = useState("dashboard");
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
@@ -48,6 +426,141 @@ export default function App() {
   const [tickets, setTickets] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [policies, setPolicies] = useState([]);
+
+  const getAuthHeaders = () => {
+    return token ? { "Authorization": `Bearer ${token}` } : {};
+  };
+
+  const getHeaders = (isJson = false) => {
+    const headers = { ...getAuthHeaders() };
+    if (isJson) {
+      headers["Content-Type"] = "application/json";
+    }
+    return headers;
+  };
+
+  useEffect(() => {
+    const verifyToken = async () => {
+      if (token) {
+        try {
+          const res = await fetch(`${API_BASE}/auth/me`, {
+            headers: { "Authorization": `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const userData = await res.json();
+            setUser(userData);
+            setIsOfflineMode(false);
+          } else {
+            localStorage.removeItem("sbomguard_token");
+            setToken("");
+            setUser(null);
+          }
+        } catch (err) {
+          console.error("Auth server offline. Operating token in fallback mode.", err);
+          setUser({ username: "admin", role: "ADMIN" });
+        }
+      }
+    };
+    verifyToken();
+  }, [token]);
+
+  useEffect(() => {
+    if (token || isOfflineMode) {
+      loadPlatformData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, isOfflineMode]);
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setAuthError("");
+    try {
+      const res = await fetch(`${API_BASE}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: authUsername,
+          password: authPassword,
+          email: authEmail,
+          role: authRole
+        })
+      });
+      if (res.ok) {
+        setAuthMode("login");
+        setAuthError("Registration successful! Please login.");
+      } else {
+        const data = await res.json();
+        setAuthError(data.detail || "Registration failed");
+      }
+    } catch (err) {
+      console.error("Auth register connection error", err);
+      setAuthError("Could not connect to auth service");
+    }
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthError("");
+    try {
+      const formData = new URLSearchParams();
+      formData.append("username", authUsername);
+      formData.append("password", authPassword);
+
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: formData.toString()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem("sbomguard_token", data.access_token);
+        setToken(data.access_token);
+        setUser({ username: data.username, role: data.role });
+        setIsOfflineMode(false);
+      } else {
+        const data = await res.json();
+        setAuthError(data.detail || "Invalid credentials");
+      }
+    } catch (err) {
+      console.error("Auth login connection error", err);
+      setAuthError("Could not connect to auth service");
+    }
+  };
+
+  const handleDownloadReport = async (endpoint, filename) => {
+    if (isOfflineMode) {
+      const dummyContent = endpoint.includes("csv") 
+        ? "Mock,CSV,Data\nProject," + selectedProject?.name + ",1"
+        : JSON.stringify({ mock: true, project: selectedProject?.name }, null, 2);
+      const blob = new Blob([dummyContent], { type: endpoint.includes("csv") ? "text/csv" : "application/json" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        headers: getAuthHeaders()
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      } else {
+        alert("Failed to download report: status " + res.status);
+      }
+    } catch (err) {
+      alert("Failed to connect to report endpoint: " + err.message);
+    }
+  };
   
   // Scans management state
   const [localScanPath, setLocalScanPath] = useState("");
@@ -100,25 +613,25 @@ export default function App() {
         setIsOfflineMode(false);
         
         // Fetch projects
-        const projRes = await fetch(`${API_BASE}/api/projects`);
+        const projRes = await fetch(`${API_BASE}/api/projects`, { headers: getAuthHeaders() });
         if (projRes.ok) setProjects(await projRes.json());
         
         // Fetch tickets
-        const tickRes = await fetch(`${API_BASE}/api/tickets`);
+        const tickRes = await fetch(`${API_BASE}/api/tickets`, { headers: getAuthHeaders() });
         if (tickRes.ok) setTickets(await tickRes.json());
         
         // Fetch audit logs
-        const auditRes = await fetch(`${API_BASE}/api/audit-logs`);
+        const auditRes = await fetch(`${API_BASE}/api/audit-logs`, { headers: getAuthHeaders() });
         if (auditRes.ok) setAuditLogs(await auditRes.json());
         
         // Fetch policies
-        const polRes = await fetch(`${API_BASE}/api/policies`);
+        const polRes = await fetch(`${API_BASE}/api/policies`, { headers: getAuthHeaders() });
         if (polRes.ok) setPolicies(await polRes.json());
       } else {
         throw new Error("Server not responding");
       }
     } catch (e) {
-      console.log("Server offline, booting in fully-functional Mock Demo mode.");
+      console.error("Server offline, booting in fully-functional Mock Demo mode.", e);
       setIsOfflineMode(true);
       setProjects(MOCK_PROJECTS);
       setTickets(MOCK_TICKETS);
@@ -128,14 +641,10 @@ export default function App() {
   };
 
   useEffect(() => {
-    loadPlatformData();
-  }, []);
-
-  // Fetch project details
-  useEffect(() => {
     if (selectedProjectId) {
       fetchProjectDetails(selectedProjectId);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProjectId]);
 
   const fetchProjectDetails = async (projId) => {
@@ -167,13 +676,13 @@ export default function App() {
       }
     } else {
       try {
-        const r = await fetch(`${API_BASE}/api/projects/${projId}`);
+        const r = await fetch(`${API_BASE}/api/projects/${projId}`, { headers: getAuthHeaders() });
         if (r.ok) {
           const detail = await r.json();
           setSelectedProject(detail);
         }
         
-        const rHistory = await fetch(`${API_BASE}/api/projects/${projId}/history`);
+        const rHistory = await fetch(`${API_BASE}/api/projects/${projId}/history`, { headers: getAuthHeaders() });
         if (rHistory.ok) {
           setVersionHistory(await rHistory.json());
         }
@@ -227,7 +736,7 @@ export default function App() {
       try {
         const r = await fetch(`${API_BASE}/api/scans/local`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: getHeaders(true),
           body: JSON.stringify({
             project_id: selectedProjectId,
             directory_path: localScanPath
@@ -239,10 +748,9 @@ export default function App() {
           setScanMessage(`Scan initiated. Scan ID: ${scanId}. Polling logs...`);
           
           // Poll logs & status
-          let isRunning = true;
           const interval = setInterval(async () => {
-            const statusReq = await fetch(`${API_BASE}/api/scans/${scanId}/status`);
-            const logsReq = await fetch(`${API_BASE}/api/scans/${scanId}/logs`);
+            const statusReq = await fetch(`${API_BASE}/api/scans/${scanId}/status`, { headers: getAuthHeaders() });
+            const logsReq = await fetch(`${API_BASE}/api/scans/${scanId}/logs`, { headers: getAuthHeaders() });
             
             if (statusReq.ok && logsReq.ok) {
               const statusData = await statusReq.json();
@@ -314,7 +822,7 @@ export default function App() {
       try {
         const r = await fetch(`${API_BASE}/api/vulnerabilities/vex`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: getHeaders(true),
           body: JSON.stringify({
             component_purl: expandedCompId,
             scan_id: selectedProject.latest_scan_id,
@@ -354,7 +862,7 @@ export default function App() {
       });
     } else {
       try {
-        const r = await fetch(`${API_BASE}/api/projects/${selectedProjectId}/diff/${selectedVersionBase}/${selectedVersionHead}`);
+        const r = await fetch(`${API_BASE}/api/projects/${selectedProjectId}/diff/${selectedVersionBase}/${selectedVersionHead}`, { headers: getAuthHeaders() });
         if (r.ok) {
           setDiffResult(await r.json());
         }
@@ -374,9 +882,6 @@ export default function App() {
     
     if (isOfflineMode) {
       // Mock result
-      const proj = MOCK_PROJECTS.find(p => p.id === selectedProjectId);
-      const originalRisk = proj ? proj.risk_score : 95;
-      
       setWhatIfResult({
         status: "SIMULATION",
         upgraded_package: whatIfPurl.split("/").pop().split("@")[0],
@@ -390,7 +895,7 @@ export default function App() {
       try {
         const r = await fetch(`${API_BASE}/api/projects/${selectedProjectId}/whatif`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: getHeaders(true),
           body: JSON.stringify({
             upgrade_purl: whatIfPurl,
             target_version: whatIfVersion
@@ -433,7 +938,7 @@ export default function App() {
       try {
         const r = await fetch(`${API_BASE}/api/policies`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: getHeaders(true),
           body: JSON.stringify({
             name: newPolicyName,
             rule_type: newPolicyType,
@@ -459,7 +964,7 @@ export default function App() {
       try {
         const r = await fetch(`${API_BASE}/api/policies/${pId}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: getHeaders(true),
           body: JSON.stringify({
             is_active: !currentStatus
           })
@@ -485,7 +990,7 @@ export default function App() {
       try {
         const r = await fetch(`${API_BASE}/api/tickets/${ticketId}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: getHeaders(true),
           body: JSON.stringify({
             status: nextStatus
           })
@@ -527,6 +1032,36 @@ export default function App() {
 
   const stats = getDashboardStats();
 
+  if (!token && !isOfflineMode) {
+    return (
+      <AuthScreen
+        authMode={authMode}
+        setAuthMode={setAuthMode}
+        authUsername={authUsername}
+        setAuthUsername={setAuthUsername}
+        authPassword={authPassword}
+        setAuthPassword={setAuthPassword}
+        authEmail={authEmail}
+        setAuthEmail={setAuthEmail}
+        authRole={authRole}
+        setAuthRole={setAuthRole}
+        authError={authError}
+        setAuthError={setAuthError}
+        handleLogin={handleLogin}
+        handleRegister={handleRegister}
+        setIsOfflineMode={setIsOfflineMode}
+        setProjects={setProjects}
+        setTickets={setTickets}
+        setAuditLogs={setAuditLogs}
+        setPolicies={setPolicies}
+        MOCK_PROJECTS={MOCK_PROJECTS}
+        MOCK_TICKETS={MOCK_TICKETS}
+        MOCK_AUDIT={MOCK_AUDIT}
+        MOCK_POLICIES={MOCK_POLICIES}
+      />
+    );
+  }
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       
@@ -544,6 +1079,7 @@ export default function App() {
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <button 
+            type="button"
             className={`btn-secondary ${activeTab === 'dashboard' ? 'active' : ''}`}
             onClick={() => { setActiveTab("dashboard"); setSelectedProjectId(null); }}
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'dashboard' ? 'rgba(99, 102, 241, 0.15)' : 'transparent', borderColor: activeTab === 'dashboard' ? 'var(--primary)' : 'transparent' }}
@@ -552,6 +1088,7 @@ export default function App() {
           </button>
           
           <button 
+            type="button"
             className={`btn-secondary ${activeTab === 'projects' ? 'active' : ''}`}
             onClick={() => setActiveTab("projects")}
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'projects' ? 'rgba(99, 102, 241, 0.15)' : 'transparent', borderColor: activeTab === 'projects' ? 'var(--primary)' : 'transparent' }}
@@ -560,6 +1097,7 @@ export default function App() {
           </button>
 
           <button 
+            type="button"
             className={`btn-secondary ${activeTab === 'tickets' ? 'active' : ''}`}
             onClick={() => setActiveTab("tickets")}
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'tickets' ? 'rgba(99, 102, 241, 0.15)' : 'transparent', borderColor: activeTab === 'tickets' ? 'var(--primary)' : 'transparent' }}
@@ -568,6 +1106,7 @@ export default function App() {
           </button>
 
           <button 
+            type="button"
             className={`btn-secondary ${activeTab === 'policies' ? 'active' : ''}`}
             onClick={() => setActiveTab("policies")}
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'policies' ? 'rgba(99, 102, 241, 0.15)' : 'transparent', borderColor: activeTab === 'policies' ? 'var(--primary)' : 'transparent' }}
@@ -576,6 +1115,7 @@ export default function App() {
           </button>
 
           <button 
+            type="button"
             className={`btn-secondary ${activeTab === 'audit' ? 'active' : ''}`}
             onClick={() => setActiveTab("audit")}
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'audit' ? 'rgba(99, 102, 241, 0.15)' : 'transparent', borderColor: activeTab === 'audit' ? 'var(--primary)' : 'transparent' }}
@@ -594,7 +1134,7 @@ export default function App() {
               ? 'Local server unreachable. Operating on mock engine dataset.' 
               : 'FastAPI backend connection active. All ML predictions live.'}
           </p>
-          <button className="btn-secondary" onClick={loadPlatformData} style={{ padding: '6px', fontSize: '0.75rem', width: '100%', justifyContent: 'center' }}>
+          <button type="button" className="btn-secondary" onClick={loadPlatformData} style={{ padding: '6px', fontSize: '0.75rem', width: '100%', justifyContent: 'center' }}>
             <RefreshCw size={12} /> Sync Database
           </button>
         </div>
@@ -610,210 +1150,41 @@ export default function App() {
             <h1 style={{ fontSize: '2.2rem', marginTop: '4px' }}>AI Compliance & Assessment Platform</h1>
           </div>
           
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: 'rgba(255,255,255,0.03)', padding: '8px 16px', borderRadius: '30px', border: '1px solid var(--border-color)' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Security Operations Center</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Role: Administrator</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: 'rgba(255,255,255,0.03)', padding: '8px 16px', borderRadius: '30px', border: '1px solid var(--border-color)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{user?.username || 'Security Operations Center'}</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Role: {user?.role || 'Administrator'}</span>
+              </div>
+              <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1 0%, #3b82f6 100%)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 800 }}>
+                {(user?.username?.substring(0, 2) || "AD").toUpperCase()}
+              </div>
             </div>
-            <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1 0%, #3b82f6 100%)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: 800 }}>
-              AD
-            </div>
+            <button 
+              type="button"
+              className="btn-secondary" 
+              onClick={() => {
+                localStorage.removeItem("sbomguard_token");
+                setToken("");
+                setUser(null);
+                setIsOfflineMode(false);
+              }}
+              style={{ padding: '8px 12px', fontSize: '0.8rem', borderRadius: '20px' }}
+            >
+              Logout
+            </button>
           </div>
         </header>
 
         {/* TAB 1: DASHBOARD */}
         {activeTab === 'dashboard' && (
-          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-            
-            {/* KPI Cards Grid */}
-            <div className="metrics-grid">
-              <div className="glass-panel" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
-                <div style={{ padding: '16px', borderRadius: '12px', background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
-                  <Database size={28} color="var(--primary)" />
-                </div>
-                <div>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Scanned Projects</span>
-                  <h3 style={{ fontSize: '1.8rem', marginTop: '4px' }}>{stats.totalProjects}</h3>
-                </div>
-              </div>
-
-              <div className="glass-panel" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
-                <div style={{ padding: '16px', borderRadius: '12px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                  <Layers size={28} color="var(--info)" />
-                </div>
-                <div>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Analyzed Dependencies</span>
-                  <h3 style={{ fontSize: '1.8rem', marginTop: '4px' }}>{stats.totalDeps}</h3>
-                </div>
-              </div>
-
-              <div className="glass-panel" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
-                <div style={{ padding: '16px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                  <AlertTriangle size={28} color="var(--critical)" />
-                </div>
-                <div>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Unresolved Vulnerabilities</span>
-                  <h3 style={{ fontSize: '1.8rem', marginTop: '4px', color: stats.totalCritical > 0 ? 'var(--critical)' : 'inherit' }}>
-                    {stats.totalCritical} <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Critical / {stats.totalHigh} High</span>
-                  </h3>
-                </div>
-              </div>
-
-              <div className="glass-panel" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
-                <div style={{ padding: '16px', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
-                  <Activity size={28} color="var(--low)" />
-                </div>
-                <div>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Avg SBOM Quality Score</span>
-                  <h3 style={{ fontSize: '1.8rem', marginTop: '4px', color: 'var(--low)' }}>{stats.avgQuality}%</h3>
-                </div>
-              </div>
-            </div>
-
-            {/* Visual Analytics row */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '24px' }}>
-              
-              {/* Quality score trends */}
-              <section className="glass-panel" style={{ padding: '24px' }}>
-                <h3 style={{ fontSize: '1.1rem', marginBottom: '20px' }}>Historical SBOM Completeness & Quality</h3>
-                <div style={{ width: '100%', height: '240px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', padding: '10px 20px', borderBottom: '1px solid var(--border-color)', position: 'relative' }}>
-                  {/* SVG background grid lines */}
-                  <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
-                    <line x1="0" y1="20%" x2="100%" y2="20%" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
-                    <line x1="0" y1="50%" x2="100%" y2="50%" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
-                    <line x1="0" y1="80%" x2="100%" y2="80%" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
-                  </svg>
-                  
-                  {/* Custom pure React SVG Line chart */}
-                  <svg viewBox="0 0 500 200" style={{ width: '100%', height: '100%' }}>
-                    <defs>
-                      <linearGradient id="gradient-area" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#6366f1" stopOpacity="0.4" />
-                        <stop offset="100%" stopColor="#6366f1" stopOpacity="0.0" />
-                      </linearGradient>
-                    </defs>
-                    <path 
-                      d="M 50 140 Q 150 90 250 80 T 450 40 L 450 200 L 50 200 Z" 
-                      fill="url(#gradient-area)" 
-                    />
-                    <path 
-                      d="M 50 140 Q 150 90 250 80 T 450 40" 
-                      fill="none" 
-                      stroke="#6366f1" 
-                      strokeWidth="4" 
-                      strokeLinecap="round"
-                    />
-                    <circle cx="50" cy="140" r="5" fill="#ffffff" stroke="#6366f1" strokeWidth="2" />
-                    <circle cx="180" cy="115" r="5" fill="#ffffff" stroke="#6366f1" strokeWidth="2" />
-                    <circle cx="310" cy="75" r="5" fill="#ffffff" stroke="#6366f1" strokeWidth="2" />
-                    <circle cx="450" cy="40" r="5" fill="#ffffff" stroke="#6366f1" strokeWidth="2" />
-                    
-                    <text x="40" y="165" fill="var(--text-muted)" fontSize="10">Scan v1 (70%)</text>
-                    <text x="170" y="140" fill="var(--text-muted)" fontSize="10">Scan v2 (78%)</text>
-                    <text x="300" y="98" fill="var(--text-muted)" fontSize="10">Scan v3 (85%)</text>
-                    <text x="410" y="25" fill="var(--low)" fontSize="10" fontWeight="bold">Scan v4 (94%)</text>
-                  </svg>
-                </div>
-              </section>
-
-              {/* Vulnerabilities severity donut */}
-              <section className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                <h3 style={{ fontSize: '1.1rem' }}>Active Risk Disclosures</h3>
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '160px', position: 'relative' }}>
-                  
-                  {/* SVG Donut Chart */}
-                  <svg viewBox="0 0 36 36" style={{ width: '130px', height: '130px' }}>
-                    <circle cx="18" cy="18" r="15.915" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="3" />
-                    
-                    {/* Critical slice */}
-                    <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--critical)" strokeWidth="3.2" 
-                      strokeDasharray="20 80" strokeDashoffset="25" 
-                    />
-                    {/* High slice */}
-                    <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--high)" strokeWidth="3.2" 
-                      strokeDasharray="30 70" strokeDashoffset="5" 
-                    />
-                    {/* Medium slice */}
-                    <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--medium)" strokeWidth="3.2" 
-                      strokeDasharray="15 85" strokeDashoffset="75" 
-                    />
-                    {/* Low slice */}
-                    <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--low)" strokeWidth="3.2" 
-                      strokeDasharray="35 65" strokeDashoffset="90" 
-                    />
-                  </svg>
-                  
-                  <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <span style={{ fontSize: '1.6rem', fontWeight: 800 }}>10</span>
-                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>VULNS</span>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.8rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--critical)' }} />
-                    <span>Critical: 2</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--high)' }} />
-                    <span>High: 3</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--medium)' }} />
-                    <span>Medium: 1</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--low)' }} />
-                    <span>Low: 4</span>
-                  </div>
-                </div>
-              </section>
-            </div>
-
-            {/* List of projects section */}
-            <section className="glass-panel" style={{ padding: '24px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h3 style={{ fontSize: '1.1rem' }}>Active Projects Monitoring</h3>
-                <button className="btn-primary" onClick={() => setActiveTab("projects")}>
-                  Register & Scan <ArrowRight size={16} />
-                </button>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
-                {projects.map(p => (
-                  <div key={p.id} className="glass-panel" style={{ padding: '20px', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <h4 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{p.name}</h4>
-                      <span className={`badge ${
-                        p.risk_level === 'CRITICAL' ? 'badge-critical' : (p.risk_level === 'HIGH' ? 'badge-high' : 'badge-low')
-                      }`}>{p.risk_level} RISK</span>
-                    </div>
-                    
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', height: '40px', overflow: 'hidden' }}>{p.description}</p>
-                    
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
-                      <div>
-                        <span style={{ color: 'var(--text-muted)' }}>Vulnerabilities: </span>
-                        <span style={{ fontWeight: 700, color: p.vulnerability_count > 0 ? 'var(--critical)' : 'inherit' }}>{p.vulnerability_count}</span>
-                      </div>
-                      <div>
-                        <span style={{ color: 'var(--text-muted)' }}>Quality: </span>
-                        <span style={{ fontWeight: 700, color: 'var(--low)' }}>{p.quality_score}%</span>
-                      </div>
-                      <button 
-                        className="btn-secondary" 
-                        onClick={() => { setSelectedProjectId(p.id); setActiveTab("projects"); }}
-                        style={{ padding: '4px 10px', fontSize: '0.75rem' }}
-                      >
-                        Inspect SBOM
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-          </div>
+          <DashboardTab
+            stats={stats}
+            projects={projects}
+            getRiskBadgeClass={getRiskBadgeClass}
+            setSelectedProjectId={setSelectedProjectId}
+            setActiveTab={setActiveTab}
+          />
         )}
 
         {/* TAB 2: PROJECTS & SCAN */}
@@ -827,7 +1198,19 @@ export default function App() {
                   <h3 style={{ fontSize: '1.1rem', marginBottom: '20px' }}>Registered Software Assets</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
                     {projects.map(p => (
-                      <div key={p.id} className="glass-panel" style={{ padding: '24px', cursor: 'pointer', '&:hover': { borderColor: 'var(--primary)' } }} onClick={() => setSelectedProjectId(p.id)}>
+                      <div 
+                        key={p.id} 
+                        className="glass-panel" 
+                        style={{ padding: '24px', cursor: 'pointer', '&:hover': { borderColor: 'var(--primary)' } }} 
+                        onClick={() => setSelectedProjectId(p.id)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            setSelectedProjectId(p.id);
+                          }
+                        }}
+                      >
                         <h4 style={{ fontSize: '1.2rem', marginBottom: '8px' }}>{p.name}</h4>
                         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>{p.description}</p>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
@@ -841,7 +1224,7 @@ export default function App() {
                     <div className="glass-panel" style={{ padding: '24px', borderStyle: 'dashed', borderColor: 'var(--primary)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
                       <Database size={32} color="var(--primary)" />
                       <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Create New Project Container</span>
-                      <button className="btn-primary" onClick={() => {
+                      <button type="button" className="btn-primary" onClick={() => {
                         const name = prompt("Enter project name:");
                         if (name) {
                           setProjects(prev => [
@@ -859,7 +1242,7 @@ export default function App() {
               /* Project details page */
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <button className="btn-secondary" onClick={() => { setSelectedProjectId(null); setSelectedProject(null); }}>
+                  <button type="button" className="btn-secondary" onClick={() => { setSelectedProjectId(null); setSelectedProject(null); }}>
                     &larr; Back to Assets
                   </button>
                   <h2 style={{ fontSize: '1.6rem' }}>{selectedProject?.name}</h2>
@@ -874,8 +1257,10 @@ export default function App() {
                     <Activity size={18} /> Trigger Compliance Audit Scanning
                   </h3>
                   
-                  <form onSubmit={handleTriggerScan} style={{ display: 'flex', gap: '16px' }}>
+                  <form onSubmit={handleTriggerScan} style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                    <label htmlFor="scan-path-input" style={{ display: 'none' }}>Local Scan Directory Path</label>
                     <input 
+                      id="scan-path-input"
                       type="text" 
                       placeholder="Enter local repository absolute directory path (e.g. C:\Users\User\my-app)..." 
                       value={localScanPath}
@@ -908,6 +1293,7 @@ export default function App() {
                   {["sbom", "graph", "compliance", "diff", "whatif", "reports"].map(tab => (
                     <button 
                       key={tab} 
+                      type="button"
                       className={`btn-secondary ${detailSubtab === tab ? 'active' : ''}`}
                       onClick={() => setDetailSubtab(tab)}
                       style={{ 
@@ -932,8 +1318,10 @@ export default function App() {
                   <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
                       <div style={{ flex: 1, position: 'relative' }}>
+                        <label htmlFor="search-deps-input" style={{ display: 'none' }}>Search dependencies</label>
                         <Search size={16} style={{ position: 'absolute', left: '12px', top: '14px', color: 'var(--text-muted)' }} />
                         <input 
+                          id="search-deps-input"
                           type="text" 
                           placeholder="Search dependencies by name..." 
                           value={searchQuery}
@@ -942,7 +1330,9 @@ export default function App() {
                         />
                       </div>
                       
+                      <label htmlFor="ecosystem-select" style={{ display: 'none' }}>Ecosystem Filter</label>
                       <select 
+                        id="ecosystem-select"
                         value={selectedEcosystem} 
                         onChange={(e) => setSelectedEcosystem(e.target.value)}
                         style={{ padding: '10px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white' }}
@@ -953,7 +1343,9 @@ export default function App() {
                         <option value="maven">Maven (Java)</option>
                       </select>
 
+                      <label htmlFor="risk-select" style={{ display: 'none' }}>Risk Filter</label>
                       <select 
+                        id="risk-select"
                         value={selectedRisk} 
                         onChange={(e) => setSelectedRisk(e.target.value)}
                         style={{ padding: '10px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white' }}
@@ -993,16 +1385,14 @@ export default function App() {
                                 </td>
                                 <td style={{ padding: '16px' }}>{c.license}</td>
                                 <td style={{ padding: '16px' }}>
-                                  <span className={`badge ${
-                                    c.risk_level === 'CRITICAL' ? 'badge-critical' : (c.risk_level === 'HIGH' ? 'badge-high' : 'badge-low')
-                                  }`}>{c.risk_level} ({c.risk_score})</span>
+                                  <span className={`badge ${getRiskBadgeClass(c.risk_level)}`}>{c.risk_level} ({c.risk_score})</span>
                                 </td>
                                 <td style={{ padding: '16px' }}>
                                   <span style={{ color: c.anomaly_score > 60 ? 'var(--critical)' : 'inherit', fontWeight: 700 }}>{c.anomaly_score}/100</span>
                                 </td>
                                 <td style={{ padding: '16px' }}>{c.direct ? 'Direct (0)' : `Transitive (${c.depth})`}</td>
                                 <td style={{ padding: '16px' }}>
-                                  <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '0.75rem' }}>
+                                  <button type="button" className="btn-secondary" style={{ padding: '4px 8px', fontSize: '0.75rem' }}>
                                     {expandedCompId === c.purl ? 'Collapse' : 'Explain Findings'}
                                   </button>
                                 </td>
@@ -1055,7 +1445,9 @@ export default function App() {
                                         <h4 style={{ fontSize: '0.95rem', marginBottom: '12px', color: 'var(--info)' }}>VEX (Vulnerability Exploitability eXchange) Formulator</h4>
                                         <form onSubmit={handleUpdateVex} style={{ display: 'flex', gap: '12px', flexDirection: 'column' }}>
                                           <div style={{ display: 'flex', gap: '12px' }}>
+                                            <label htmlFor="vex-status-select" style={{ display: 'none' }}>VEX Status</label>
                                             <select 
+                                              id="vex-status-select"
                                               value={vexStatus} 
                                               onChange={(e) => setVexStatus(e.target.value)}
                                               style={{ padding: '8px', borderRadius: '6px', background: '#0b0f19', border: '1px solid var(--border-color)', color: 'white' }}
@@ -1065,7 +1457,9 @@ export default function App() {
                                               <option value="UNDER_INVESTIGATION">UNDER INVESTIGATION</option>
                                               <option value="FIXED">FIXED (Virtual patch applied)</option>
                                             </select>
+                                            <label htmlFor="vex-justification-input" style={{ display: 'none' }}>VEX Justification</label>
                                             <input 
+                                              id="vex-justification-input"
                                               type="text" 
                                               placeholder="Provide exploitability justification (e.g. library functions not invoked by compiler entrypoints)..." 
                                               value={vexJustification}
@@ -1235,8 +1629,9 @@ Remediation Recommendations:
                     {/* Selectors */}
                     <div className="glass-panel" style={{ padding: '24px', display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
                       <div style={{ flex: 1 }}>
-                        <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 600 }}>Select Base Scan Version</label>
+                        <label htmlFor="base-version-select" style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 600 }}>Select Base Scan Version</label>
                         <select 
+                          id="base-version-select"
                           value={selectedVersionBase}
                           onChange={(e) => setSelectedVersionBase(e.target.value)}
                           style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#0b0f19', border: '1px solid var(--border-color)', color: 'white' }}
@@ -1249,8 +1644,9 @@ Remediation Recommendations:
                       </div>
 
                       <div style={{ flex: 1 }}>
-                        <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 600 }}>Select Head Scan Version</label>
+                        <label htmlFor="head-version-select" style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 600 }}>Select Head Scan Version</label>
                         <select 
+                          id="head-version-select"
                           value={selectedVersionHead}
                           onChange={(e) => setSelectedVersionHead(e.target.value)}
                           style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#0b0f19', border: '1px solid var(--border-color)', color: 'white' }}
@@ -1262,7 +1658,7 @@ Remediation Recommendations:
                         </select>
                       </div>
 
-                      <button className="btn-primary" onClick={handleCompareVersions} style={{ padding: '10px 24px' }}>
+                      <button type="button" className="btn-primary" onClick={handleCompareVersions} style={{ padding: '10px 24px' }}>
                         Compute Diff Tree
                       </button>
                     </div>
@@ -1276,20 +1672,20 @@ Remediation Recommendations:
                           <span style={{ fontSize: '0.85rem' }}>No package shifts detected between these scan sessions.</span>
                         ) : (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.85rem' }}>
-                            {diffResult.added.map((a, i) => (
-                              <div key={i} style={{ padding: '8px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)', color: 'var(--low)' }}>
+                            {diffResult.added.map((a) => (
+                              <div key={`${a.name}-${a.version}-${a.ecosystem}`} style={{ padding: '8px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)', color: 'var(--low)' }}>
                                 <strong>+ ADDED Component:</strong> {a.name}@{a.version} ({a.ecosystem})
                               </div>
                             ))}
                             
-                            {diffResult.updated.map((u, i) => (
-                              <div key={i} style={{ padding: '8px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.05)', border: '1px solid rgba(59, 130, 246, 0.2)', color: 'var(--info)' }}>
+                            {diffResult.updated.map((u) => (
+                              <div key={`${u.name}-${u.old_version}-${u.new_version}`} style={{ padding: '8px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.05)', border: '1px solid rgba(59, 130, 246, 0.2)', color: 'var(--info)' }}>
                                 <strong>&Delta; MODIFIED Version:</strong> {u.name} upgraded from {u.old_version} to {u.new_version}
                               </div>
                             ))}
                             
-                            {diffResult.removed.map((r, i) => (
-                              <div key={i} style={{ padding: '8px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', color: 'var(--critical)' }}>
+                            {diffResult.removed.map((r) => (
+                              <div key={`${r.name}-${r.version}`} style={{ padding: '8px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', color: 'var(--critical)' }}>
                                 <strong>- REMOVED Component:</strong> {r.name}@{r.version}
                               </div>
                             ))}
@@ -1307,8 +1703,9 @@ Remediation Recommendations:
                       <h4 style={{ fontSize: '1rem', marginBottom: '16px' }}>Run Simulation (Assess hypothetical patch risk changes)</h4>
                       <form onSubmit={handleWhatIfSimulation} style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
                         <div style={{ flex: 1.5 }}>
-                          <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Target Component (PURL)</label>
+                          <label htmlFor="whatif-purl-select" style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Target Component (PURL)</label>
                           <select 
+                            id="whatif-purl-select"
                             value={whatIfPurl} 
                             onChange={(e) => setWhatIfPurl(e.target.value)}
                             style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#0b0f19', border: '1px solid var(--border-color)', color: 'white' }}
@@ -1323,8 +1720,9 @@ Remediation Recommendations:
                         </div>
 
                         <div style={{ flex: 1 }}>
-                          <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Simulation Upgrade Version</label>
+                          <label htmlFor="whatif-version-input" style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Simulation Upgrade Version</label>
                           <input 
+                            id="whatif-version-input"
                             type="text" 
                             placeholder="e.g. 2.15.0" 
                             value={whatIfVersion}
@@ -1386,23 +1784,32 @@ Remediation Recommendations:
                     <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>Download standardized CycloneDX & SPDX software bill of material files or export CSV security reports.</p>
                     
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-                      <a href={`${API_BASE}/api/reports/project/${selectedProjectId}/cyclonedx`} download style={{ textDecoration: 'none' }}>
-                        <button className="btn-secondary" style={{ width: '100%', justifyContent: 'center', padding: '16px' }}>
-                          <Download size={20} color="var(--primary)" /> Download CycloneDX (JSON)
-                        </button>
-                      </a>
+                      <button 
+                        type="button" 
+                        className="btn-secondary" 
+                        onClick={() => handleDownloadReport(`/api/reports/project/${selectedProjectId}/cyclonedx`, `cyclonedx_${selectedProject?.name || 'report'}.json`)} 
+                        style={{ width: '100%', justifyContent: 'center', padding: '16px' }}
+                      >
+                        <Download size={20} color="var(--primary)" /> Download CycloneDX (JSON)
+                      </button>
                       
-                      <a href={`${API_BASE}/api/reports/project/${selectedProjectId}/spdx`} download style={{ textDecoration: 'none' }}>
-                        <button className="btn-secondary" style={{ width: '100%', justifyContent: 'center', padding: '16px' }}>
-                          <Download size={20} color="var(--info)" /> Download SPDX (JSON)
-                        </button>
-                      </a>
+                      <button 
+                        type="button" 
+                        className="btn-secondary" 
+                        onClick={() => handleDownloadReport(`/api/reports/project/${selectedProjectId}/spdx`, `spdx_${selectedProject?.name || 'report'}.json`)} 
+                        style={{ width: '100%', justifyContent: 'center', padding: '16px' }}
+                      >
+                        <Download size={20} color="var(--info)" /> Download SPDX (JSON)
+                      </button>
 
-                      <a href={`${API_BASE}/api/reports/project/${selectedProjectId}/csv`} download style={{ textDecoration: 'none' }}>
-                        <button className="btn-secondary" style={{ width: '100%', justifyContent: 'center', padding: '16px' }}>
-                          <Download size={20} color="var(--low)" /> Download CSV Audit Report
-                        </button>
-                      </a>
+                      <button 
+                        type="button" 
+                        className="btn-secondary" 
+                        onClick={() => handleDownloadReport(`/api/reports/project/${selectedProjectId}/csv`, `sbom_report_${selectedProject?.name || 'report'}.csv`)} 
+                        style={{ width: '100%', justifyContent: 'center', padding: '16px' }}
+                      >
+                        <Download size={20} color="var(--low)" /> Download CSV Audit Report
+                      </button>
                     </div>
                   </div>
                 )}
@@ -1447,13 +1854,12 @@ Remediation Recommendations:
                       <td style={{ padding: '16px' }}>
                         <span style={{ 
                           padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600,
-                          background: t.status === 'OPEN' ? 'rgba(239, 68, 68, 0.1)' : (t.status === 'IN_PROGRESS' ? 'rgba(234, 179, 8, 0.1)' : 'rgba(16, 185, 129, 0.1)'),
-                          color: t.status === 'OPEN' ? 'var(--critical)' : (t.status === 'IN_PROGRESS' ? 'var(--medium)' : 'var(--low)')
+                          ...getTicketStatusBadgeStyle(t.status)
                         }}>{t.status}</span>
                       </td>
                       <td style={{ padding: '16px' }}>
                         {t.status !== 'RESOLVED' ? (
-                          <button className="btn-secondary" onClick={() => handleUpdateTicketStatus(t.ticket_id, t.status)} style={{ padding: '6px 12px', fontSize: '0.75rem' }}>
+                          <button type="button" className="btn-secondary" onClick={() => handleUpdateTicketStatus(t.ticket_id, t.status)} style={{ padding: '6px 12px', fontSize: '0.75rem' }}>
                             {t.status === 'OPEN' ? 'Start Work' : 'Resolve Ticket'}
                           </button>
                         ) : (
@@ -1488,6 +1894,7 @@ Remediation Recommendations:
 
                       <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                         <button 
+                          type="button"
                           className="btn-secondary" 
                           onClick={() => handleTogglePolicy(p.id, p.is_active)}
                           style={{ padding: '6px 12px', fontSize: '0.75rem', borderColor: p.is_active ? 'var(--low)' : 'var(--critical)' }}
@@ -1505,8 +1912,9 @@ Remediation Recommendations:
                 <h4 style={{ fontSize: '1.1rem', marginBottom: '16px' }}>Define Custom Rule</h4>
                 <form onSubmit={handleCreatePolicy} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Rule Name</label>
+                    <label htmlFor="new-policy-name" style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Rule Name</label>
                     <input 
+                      id="new-policy-name"
                       type="text" 
                       placeholder="e.g. Block high anomaly packages" 
                       value={newPolicyName}
@@ -1516,8 +1924,9 @@ Remediation Recommendations:
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Rule Trigger Type</label>
+                    <label htmlFor="new-policy-type" style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Rule Trigger Type</label>
                     <select 
+                      id="new-policy-type"
                       value={newPolicyType} 
                       onChange={(e) => setNewPolicyType(e.target.value)}
                       style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#0b0f19', border: '1px solid var(--border-color)', color: 'white' }}
@@ -1529,8 +1938,9 @@ Remediation Recommendations:
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Condition Pattern</label>
+                    <label htmlFor="new-policy-cond" style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Condition Pattern</label>
                     <input 
+                      id="new-policy-cond"
                       type="text" 
                       placeholder="e.g. >= 9.0 or FORBIDDEN" 
                       value={newPolicyCond}
@@ -1540,8 +1950,9 @@ Remediation Recommendations:
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Compliance Action</label>
+                    <label htmlFor="new-policy-action" style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Compliance Action</label>
                     <select 
+                      id="new-policy-action"
                       value={newPolicyAction} 
                       onChange={(e) => setNewPolicyAction(e.target.value)}
                       style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#0b0f19', border: '1px solid var(--border-color)', color: 'white' }}
@@ -1564,40 +1975,9 @@ Remediation Recommendations:
 
         {/* TAB 5: AUDIT LOGS */}
         {activeTab === 'audit' && (
-          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            <h3 style={{ fontSize: '1.4rem' }}>Security Operations Audit Trail</h3>
-            
-            <div className="glass-panel" style={{ padding: '24px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', overflow: 'hidden', textAlign: 'left' }}>
-                <thead>
-                  <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border-color)' }}>
-                    <th style={{ padding: '16px' }}>Timestamp</th>
-                    <th style={{ padding: '16px' }}>Operator</th>
-                    <th style={{ padding: '16px' }}>Compliance Action</th>
-                    <th style={{ padding: '16px' }}>Action details</th>
-                    <th style={{ padding: '16px' }}>Client IP</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {auditLogs.map((l, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                      <td style={{ padding: '16px' }} className="mono-text">{new Date(l.timestamp).toLocaleString()}</td>
-                      <td style={{ padding: '16px', fontWeight: 'bold' }}>{l.username}</td>
-                      <td style={{ padding: '16px' }}>
-                        <span style={{ 
-                          padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700,
-                          background: l.action.includes('fail') || l.action.includes('block') ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-                          color: l.action.includes('fail') || l.action.includes('block') ? 'var(--critical)' : 'var(--low)'
-                        }}>{l.action.toUpperCase()}</span>
-                      </td>
-                      <td style={{ padding: '16px', fontSize: '0.85rem' }}>{l.details}</td>
-                      <td style={{ padding: '16px' }} className="mono-text">{l.ip_address}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <AuditLogsTab
+            auditLogs={auditLogs}
+          />
         )}
 
       </main>

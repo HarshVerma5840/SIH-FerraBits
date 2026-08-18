@@ -47,6 +47,11 @@ def upload_and_scan(
             
         # Extract files
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            target_dir_abs = os.path.abspath(target_dir)
+            for member in zip_ref.namelist():
+                member_path_abs = os.path.abspath(os.path.join(target_dir, member))
+                if not member_path_abs.startswith(target_dir_abs + os.sep) and member_path_abs != target_dir_abs:
+                    raise HTTPException(status_code=400, detail="Zip archive contains invalid directory traversal paths")
             zip_ref.extractall(target_dir)
             
         # Remove zip file after extraction
