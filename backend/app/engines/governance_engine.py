@@ -1,7 +1,7 @@
 import csv
 import io
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 # RBAC Permissions Matrix
 ROLE_PERMISSIONS = {
@@ -17,25 +17,28 @@ def check_permission(user_role, required_action):
     permissions = ROLE_PERMISSIONS.get(role, ROLE_PERMISSIONS["VIEWER"])
     return required_action in permissions
 
+def _is_exception_expired(expires):
+    try:
+        exp_dt = datetime.strptime(expires, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) > exp_dt
+    except Exception:
+        return False
+
 def check_risk_acceptance(accepted_exceptions, component_purl, cve_id=None):
     """
     Engine 55: Risk Acceptance / Exception Engine
     Checks if a vulnerability or component has a valid accepted exception.
     """
     for exp in accepted_exceptions:
-        # Check if the exception matches the PURL and (optionally) the CVE ID
-        if exp.get("component_purl") == component_purl:
-            if not exp.get("cve_id") or exp.get("cve_id") == cve_id:
-                # Check expiration date if present
-                expires = exp.get("expires_at")
-                if expires:
-                    try:
-                        exp_dt = datetime.strptime(expires, "%Y-%m-%d")
-                        if datetime.utcnow() > exp_dt:
-                            continue # Exception has expired
-                    except Exception:
-                        pass
-                return True, exp.get("reason", "Accepted by security team")
+        if exp.get("component_purl") != component_purl:
+            continue
+        cve = exp.get("cve_id")
+        if cve and cve != cve_id:
+            continue
+        expires = exp.get("expires_at")
+        if expires and _is_exception_expired(expires):
+            continue
+        return True, exp.get("reason", "Accepted by security team")
     return False, None
 
 def generate_csv_report(components, vulnerabilities, risk_assessments):
@@ -92,7 +95,7 @@ def generate_executive_json_report(project, scan, components, vulnerabilities, r
             
     return {
         "report_type": "EXECUTIVE_SECURITY_SUMMARY",
-        "generated_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
         "project": {
             "name": project.name,
             "description": project.description,

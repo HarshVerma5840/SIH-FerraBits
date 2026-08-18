@@ -56,6 +56,11 @@ def upload_and_scan(
             
         # Extract files
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            target_dir_abs = os.path.abspath(target_dir)
+            for member in zip_ref.namelist():
+                member_path_abs = os.path.abspath(os.path.join(target_dir, member))
+                if not member_path_abs.startswith(target_dir_abs + os.sep) and member_path_abs != target_dir_abs:
+                    raise HTTPException(status_code=400, detail="Zip archive contains invalid directory traversal paths")
             zip_ref.extractall(target_dir)
             
         # Remove zip file after extraction
@@ -140,6 +145,7 @@ def scan_local_directory(
 
 @router.get("/{scan_id}/status")
 def get_scan_status(scan_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    _ = current_user
     scan = db.query(Scan).get(scan_id)
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
@@ -156,6 +162,7 @@ def get_scan_status(scan_id: int, db: Session = Depends(get_db), current_user = 
 
 @router.get("/{scan_id}/logs")
 def get_scan_logs(scan_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    _ = current_user
     scan = db.query(Scan).get(scan_id)
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")

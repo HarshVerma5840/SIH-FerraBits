@@ -27,9 +27,13 @@ def register(data: RegisterSchema, db: Session = Depends(get_db)):
         
     # Get or create role
     role_name = data.role.upper()
+    if role_name not in ["DEVELOPER", "VIEWER"]:
+        raise HTTPException(status_code=400, detail="Requested role is not permitted for registration")
+        
     role_obj = db.query(Role).filter_by(name=role_name).first()
     if not role_obj:
-        role_obj = Role(name=role_name, permissions="*")
+        permissions = "view_dashboard" if role_name == "VIEWER" else "view_dashboard,run_scan,view_policies,manage_tickets"
+        role_obj = Role(name=role_name, permissions=permissions)
         db.add(role_obj)
         db.commit()
         db.refresh(role_obj)

@@ -83,6 +83,7 @@ def calculate_blast_radius(component_purl, nodes, edges):
     Finds all downstream nodes (dependents) impacted by a vulnerable dependency.
     Traces paths back to the application root.
     """
+    _ = nodes
     # Build reverse adjacency list (child -> list of parents)
     rev_adj = {}
     for edge in edges:

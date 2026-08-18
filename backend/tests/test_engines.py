@@ -25,16 +25,16 @@ class TestSBOMGuardEngines(unittest.TestCase):
 
     def test_discovery_engine(self):
         manifests = discover_manifests(self.test_dir)
-        self.assertTrue(len(manifests) > 0)
+        self.assertGreater(len(manifests), 0)
         components = discover_dependencies(manifests)
-        self.assertTrue(len(components) > 0)
+        self.assertGreater(len(components), 0)
         lodash_found = any(c["name"] == "lodash" and c.get("version_spec") == "4.17.11" for c in components)
         self.assertTrue(lodash_found)
 
     def test_vulnerability_matching(self):
         mock_component = {"name": "lodash", "version": "4.17.11", "ecosystem": "npm", "purl": "pkg:npm/lodash@4.17.11"}
         vulns = run_vulnerability_detection([mock_component])
-        self.assertTrue(len(vulns) > 0)
+        self.assertGreater(len(vulns), 0)
         cves = [v["cve_id"] for v in vulns]
         self.assertIn("CVE-2019-10744", cves)
 
@@ -66,9 +66,9 @@ class TestSBOMGuardEngines(unittest.TestCase):
         }
         vulnerabilities = [{"cve_id": "CVE-2021-44228", "cvss_score": 10.0}]
         
-        result = evaluate_policy(bad_component, vulnerabilities, 95.0, rules)
+        result = evaluate_policy(bad_component, vulnerabilities, rules)
         self.assertEqual(result["action"], "BLOCK")
-        self.assertTrue(len(result["reasons"]) > 0)
+        self.assertGreater(len(result["reasons"]), 0)
 
     def test_whatif_simulation(self):
         from backend.app.engines.explanation_engine import run_whatif_simulation
@@ -87,7 +87,7 @@ class TestSBOMGuardEngines(unittest.TestCase):
         self.assertEqual(result["status"], "SIMULATION")
         self.assertEqual(result["upgraded_package"], "lodash")
         self.assertEqual(result["target_version"], "4.17.21")
-        self.assertTrue("projected_total_risk" in result)
+        self.assertIn("projected_total_risk", result)
 
 if __name__ == "__main__":
     unittest.main()

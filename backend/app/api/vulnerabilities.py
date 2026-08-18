@@ -108,6 +108,7 @@ def _serialize_finding(f: SecurityFinding, db: Session) -> dict:
 
 
 @router.get("")
+<<<<<<< HEAD
 def list_vulnerabilities(
     scan_id: int | None = None,
     project_id: int | None = None,
@@ -142,6 +143,26 @@ def get_finding(
         raise HTTPException(status_code=404, detail=f"Finding '{finding_id}' not found.")
     return _serialize_finding(f, db)
 
+=======
+def list_vulnerabilities(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    _ = current_user
+    vulns = db.query(Vulnerability).all()
+    out = []
+    for v in vulns:
+        # Count affected packages
+        # Using many-to-many relationship
+        affected_comps = len(v.components)
+        out.append({
+            "cve_id": v.cve_id,
+            "cvss_score": v.cvss_score,
+            "severity": v.severity,
+            "description": v.description,
+            "affected_versions": v.affected_versions,
+            "fixed_versions": v.fixed_versions,
+            "affected_packages_count": affected_comps
+        })
+    return out
+>>>>>>> aa70ce9d899ddd65ff93be17b470b72d189abe92
 
 @router.put("/vex")
 def update_vex_status(

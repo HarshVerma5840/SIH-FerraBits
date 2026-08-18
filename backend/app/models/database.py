@@ -1,5 +1,8 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
+
+def get_utc_now():
+    return datetime.now(timezone.utc)
 from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime, Float, ForeignKey, Table
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
@@ -35,7 +38,7 @@ class User(Base):
     email = Column(String(100), unique=True, nullable=True)
     password_hash = Column(String(200), nullable=False)
     role_id = Column(Integer, ForeignKey("roles.id"))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_utc_now)
     
     role = relationship("Role", back_populates="users")
 
@@ -44,8 +47,8 @@ class Project(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), unique=True, nullable=False, index=True)
     description = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_utc_now)
+    updated_at = Column(DateTime, default=get_utc_now, onupdate=get_utc_now)
     
     repositories = relationship("Repository", back_populates="project", cascade="all, delete-orphan")
     scans = relationship("Scan", back_populates="project", cascade="all, delete-orphan")
@@ -73,8 +76,8 @@ class Scan(Base):
     scan_source = Column(String(50), default="local") # local, upload, github
     github_repo_url = Column(String(500), nullable=True) # set when scan_source is 'github'
     triggered_by = Column(String(100), default="system")
-    started_at = Column(DateTime, default=datetime.utcnow)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, default=get_utc_now)
+    created_at = Column(DateTime, default=get_utc_now)
     completed_at = Column(DateTime, nullable=True)
     log = Column(Text, nullable=True)
     
@@ -100,7 +103,7 @@ class SBOM(Base):
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     format = Column(String(50), default="CycloneDX") # CycloneDX, SPDX
     version = Column(String(50), default="1.4")
-    generated_at = Column(DateTime, default=datetime.utcnow)
+    generated_at = Column(DateTime, default=get_utc_now)
     raw_json = Column(Text, nullable=False) # raw generated CycloneDX JSON
     file_hash = Column(String(64), nullable=False) # SHA-256 integrity hash
     signature = Column(Text, nullable=True) # digital signature
@@ -236,7 +239,7 @@ class Ticket(Base):
     recommendation = Column(Text, nullable=True)
     assignee = Column(String(100), nullable=True)
     status = Column(String(50), default="OPEN") # OPEN, IN_PROGRESS, RESOLVED
-    created_date = Column(DateTime, default=datetime.utcnow)
+    created_date = Column(DateTime, default=get_utc_now)
     
     project = relationship("Project", back_populates="tickets")
 
@@ -249,7 +252,7 @@ class Alert(Base):
     risk_score = Column(Float, nullable=False)
     reason = Column(Text, nullable=False)
     policy_action = Column(String(50), nullable=False) # BLOCK, REVIEW
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_utc_now)
     is_resolved = Column(Boolean, default=False)
     
     project = relationship("Project", back_populates="alerts")
@@ -261,7 +264,7 @@ class AuditLog(Base):
     username = Column(String(100), nullable=False, index=True)
     action = Column(String(100), nullable=False) # login, scan, policy_change, etc.
     details = Column(Text, nullable=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=get_utc_now)
     ip_address = Column(String(50), nullable=True)
 
 class SBOMVersion(Base):
@@ -270,7 +273,7 @@ class SBOMVersion(Base):
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     version_number = Column(Integer, nullable=False)
     sbom_id = Column(Integer, ForeignKey("sboms.id", ondelete="CASCADE"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_utc_now)
     
     project = relationship("Project", back_populates="sbom_versions")
 
@@ -283,7 +286,7 @@ class SBOMDiff(Base):
     added_json = Column(Text, nullable=True) # JSON list of components added
     removed_json = Column(Text, nullable=True) # JSON list of components removed
     updated_json = Column(Text, nullable=True) # JSON list of components updated
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=get_utc_now)
     
     project = relationship("Project", back_populates="sbom_diffs")
 

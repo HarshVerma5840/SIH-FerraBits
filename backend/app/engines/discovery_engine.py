@@ -117,14 +117,60 @@ def parse_package_json(filepath, relative_path):
         print(f"Error parsing package.json {filepath}: {str(e)}")
     return dependencies
 
+def _parse_lock_packages(packages, relative_path, dependencies):
+    for pkg_path, pkg_info in packages.items():
+        if not pkg_path:
+            continue
+        if "node_modules/" in pkg_path:
+            parts = pkg_path.split("node_modules/")
+            name = parts[-1]
+        else:
+            name = pkg_path
+            
+        version = pkg_info.get("version")
+        if version:
+            license_str = pkg_info.get("license", "Unknown")
+            integrity = pkg_info.get("integrity", "Unknown")
+            dependencies.append({
+                "name": name,
+                "version": version,
+                "ecosystem": "npm",
+                "direct": False,
+                "depth": pkg_path.count("node_modules"),
+                "type": "library",
+                "source_file": relative_path,
+                "hash": integrity,
+                "license": license_str,
+                "dependencies": list(pkg_info.get("dependencies", {}).keys())
+            })
+
+def _parse_lock_dependencies_v1(deps_dict, relative_path, dependencies, depth=1):
+    for name, info in deps_dict.items():
+        version = info.get("version")
+        if version:
+            integrity = info.get("integrity", "Unknown")
+            dependencies.append({
+                "name": name,
+                "version": version,
+                "ecosystem": "npm",
+                "direct": False,
+                "depth": depth,
+                "type": "library",
+                "source_file": relative_path,
+                "hash": integrity,
+                "dependencies": list(info.get("requires", {}).keys())
+            })
+        if "dependencies" in info:
+            _parse_lock_dependencies_v1(info["dependencies"], relative_path, dependencies, depth + 1)
+
 def parse_package_lock(filepath, relative_path):
     dependencies = []
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
             
-        # npm lock v2/v3 has packages
         if "packages" in data:
+<<<<<<< HEAD
             for pkg_path, pkg_info in data["packages"].items():
                 if not pkg_path: # Root package
                     continue
@@ -174,6 +220,11 @@ def parse_package_lock(filepath, relative_path):
                     if "dependencies" in info:
                         recurse_v1(info["dependencies"], depth + 1)
             recurse_v1(data["dependencies"])
+=======
+            _parse_lock_packages(data["packages"], relative_path, dependencies)
+        elif "dependencies" in data:
+            _parse_lock_dependencies_v1(data["dependencies"], relative_path, dependencies)
+>>>>>>> aa70ce9d899ddd65ff93be17b470b72d189abe92
     except Exception as e:
         print(f"Error parsing package-lock.json {filepath}: {str(e)}")
     return dependencies
@@ -294,17 +345,7 @@ def parse_dockerfile(filepath, relative_path):
         print(f"Error parsing Dockerfile {filepath}: {str(e)}")
     return dependencies
 
-def discover_dependencies(manifests):
-    """
-    Engine 5: Dependency Discovery Engine
-    Engine 6: Direct Dependency Engine
-    Engine 7: Transitive Dependency Resolution Engine
-    Engine 8: Version Resolution Engine
-    """
-    raw_components = []
-    npm_lock_data = []
-    npm_package_data = []
-    
+def _parse_manifests(manifests, raw_components, npm_package_data, npm_lock_data):
     for mf in manifests:
         filename = mf["name"]
         fullpath = mf["fullpath"]
@@ -320,45 +361,50 @@ def discover_dependencies(manifests):
             raw_components.extend(parse_pom_xml(fullpath, relpath))
         elif filename == "Dockerfile":
             raw_components.extend(parse_dockerfile(fullpath, relpath))
-            
-    # Resolve NPM direct vs transitive relations
-    if npm_package_data:
-        # We have both package.json and lockfile.
-        # Match lockfile resolved versions with package.json specs.
+
+def _resolve_npm_dependencies(npm_package_data, npm_lock_data, raw_components):
+    if not npm_package_data:
         if npm_lock_data:
-            # Map of package name to lockfile info
-            lock_map = {item["name"]: item for item in npm_lock_data}
-            
-            for direct in npm_package_data:
-                name = direct["name"]
-                if name in lock_map:
-                    # Upgrade to actual resolved version
-                    direct["version"] = lock_map[name]["version"]
-                    direct["hash"] = lock_map[name].get("hash", "Unknown")
-                    direct["license"] = lock_map[name].get("license", direct["license"])
-                    # Remove from lock map so we don't duplicate it
-                    lock_map.pop(name)
-                else:
-                    direct["version"] = direct.get("version_spec", "UNKNOWN")
-                raw_components.append(direct)
-                
-            # Add remaining transitive components from lockfile
-            for name, trans in lock_map.items():
-                trans["direct"] = False
+            for trans in npm_lock_data:
+                trans["direct"] = (trans["depth"] == 1)
                 raw_components.append(trans)
-        else:
-            # No lockfile, just add package.json direct dependencies
-            for direct in npm_package_data:
+        return
+
+    if npm_lock_data:
+        lock_map = {item["name"]: item for item in npm_lock_data}
+        for direct in npm_package_data:
+            name = direct["name"]
+            if name in lock_map:
+                direct["version"] = lock_map[name]["version"]
+                direct["hash"] = lock_map[name].get("hash", "Unknown")
+                direct["license"] = lock_map[name].get("license", direct["license"])
+                lock_map.pop(name)
+            else:
                 direct["version"] = direct.get("version_spec", "UNKNOWN")
-                raw_components.append(direct)
-    elif npm_lock_data:
-        # Lockfile only, treat all as dependencies
-        for trans in npm_lock_data:
-            # Guess direct based on depth or mark all as discovery
-            trans["direct"] = (trans["depth"] == 1)
-            raw_components.append(trans)
+            raw_components.append(direct)
             
-    # Remove duplicates and normalize versions
+        for name, trans in lock_map.items():
+            trans["direct"] = False
+            raw_components.append(trans)
+    else:
+        for direct in npm_package_data:
+            direct["version"] = direct.get("version_spec", "UNKNOWN")
+            raw_components.append(direct)
+
+def discover_dependencies(manifests):
+    """
+    Engine 5: Dependency Discovery Engine
+    Engine 6: Direct Dependency Engine
+    Engine 7: Transitive Dependency Resolution Engine
+    Engine 8: Version Resolution Engine
+    """
+    raw_components = []
+    npm_lock_data = []
+    npm_package_data = []
+    
+    _parse_manifests(manifests, raw_components, npm_package_data, npm_lock_data)
+    _resolve_npm_dependencies(npm_package_data, npm_lock_data, raw_components)
+            
     unique_components = {}
     for comp in raw_components:
         key = f"{comp['ecosystem']}:{comp['name']}@{comp.get('version', 'UNKNOWN')}"

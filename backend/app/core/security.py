@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import jwt, JWTError
 from passlib.context import CryptContext
@@ -35,41 +35,23 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
-    # If no token is provided, return a default guest or demo user so the platform works out-of-the-box in the UI without requiring rigid logins
-    if not token:
-        # Check if default guest user exists, otherwise create it
-        guest_role = db.query(Role).filter_by(name="ADMIN").first()
-        if not guest_role:
-            guest_role = Role(name="ADMIN", permissions="*")
-            db.add(guest_role)
-            db.commit()
-            db.refresh(guest_role)
-            
-        guest_user = db.query(User).filter_by(username="demo_admin").first()
-        if not guest_user:
-            guest_user = User(
-                username="demo_admin",
-                password_hash=get_password_hash("demo123"),
-                role_id=guest_role.id
-            )
-            db.add(guest_user)
-            db.commit()
-            db.refresh(guest_user)
-        return guest_user
-
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
+    if not token:
+        raise credentials_exception
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")

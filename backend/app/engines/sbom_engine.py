@@ -2,7 +2,7 @@ import uuid
 import json
 import hashlib
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import quote
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
@@ -39,7 +39,7 @@ def generate_purl(ecosystem, name, version):
 def generate_cyclonedx(project_name, components, dependencies_relations=None):
     """Engine 11: SBOM Generation Engine (CycloneDX)"""
     bom_uuid = f"urn:uuid:{uuid.uuid4()}"
-    timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     
     cdx_components = []
     for c in components:
@@ -100,7 +100,7 @@ def generate_cyclonedx(project_name, components, dependencies_relations=None):
 
 def generate_spdx(project_name, components):
     """Engine 11: SBOM Generation Engine (SPDX)"""
-    timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     spdx_id = f"SPDXRef-DOCUMENT"
     
     spdx_packages = []
@@ -170,6 +170,26 @@ def normalize_sbom(sbom_dict):
             })
     return normalized
 
+def _validate_cyclonedx(sbom_dict, errors):
+    if not sbom_dict.get("specVersion"):
+        errors.append("Missing 'specVersion'")
+    if not sbom_dict.get("serialNumber"):
+        errors.append("Missing 'serialNumber'")
+    if "components" in sbom_dict:
+        for i, comp in enumerate(sbom_dict["components"]):
+            if not comp.get("name"):
+                errors.append(f"Component at index {i} is missing 'name'")
+            if not comp.get("version"):
+                errors.append(f"Component '{comp.get('name', i)}' is missing 'version'")
+            if not comp.get("purl"):
+                errors.append(f"Component '{comp.get('name', i)}' is missing 'purl'")
+
+def _validate_spdx(sbom_dict, errors):
+    if not sbom_dict.get("name"):
+        errors.append("Missing SPDX document 'name'")
+    if not sbom_dict.get("documentNamespace"):
+        errors.append("Missing SPDX 'documentNamespace'")
+
 def validate_sbom(sbom_dict):
     """Engine 13: SBOM Validation Engine"""
     errors = []
@@ -183,25 +203,35 @@ def validate_sbom(sbom_dict):
         return False, ["Unrecognized SBOM format. Must be CycloneDX or SPDX"]
         
     if is_cyclonedx:
-        if not sbom_dict.get("specVersion"):
-            errors.append("Missing 'specVersion'")
-        if not sbom_dict.get("serialNumber"):
-            errors.append("Missing 'serialNumber'")
-        if "components" in sbom_dict:
-            for i, comp in enumerate(sbom_dict["components"]):
-                if not comp.get("name"):
-                    errors.append(f"Component at index {i} is missing 'name'")
-                if not comp.get("version"):
-                    errors.append(f"Component '{comp.get('name', i)}' is missing 'version'")
-                if not comp.get("purl"):
-                    errors.append(f"Component '{comp.get('name', i)}' is missing 'purl'")
+        _validate_cyclonedx(sbom_dict, errors)
     elif is_spdx:
-        if not sbom_dict.get("name"):
-            errors.append("Missing SPDX document 'name'")
-        if not sbom_dict.get("documentNamespace"):
-            errors.append("Missing SPDX 'documentNamespace'")
+        _validate_spdx(sbom_dict, errors)
             
     return len(errors) == 0, errors
+
+def _inspect_field(c, field_name, invalid_vals, error_msg, explanations):
+    val = c.get(field_name)
+    if not val or val in invalid_vals:
+        explanations.append(error_msg)
+        return 0
+    return 1
+
+def _inspect_component_quality(c, explanations):
+    name = c["name"]
+    has_version = _inspect_field(c, "version", ("UNKNOWN",), f"Component '{name}' is missing an exact version", explanations)
+    
+    purl = c.get("purl")
+    has_purl = 1
+    if not purl or not purl.startswith("pkg:"):
+        explanations.append(f"Component '{name}' is missing a Package URL (PURL)")
+        has_purl = 0
+        
+    has_license = _inspect_field(c, "license", ("Unknown", "NOASSERTION"), f"Component '{name}' is missing declared license metadata", explanations)
+    has_supplier = _inspect_field(c, "supplier", ("Unknown",), f"Component '{name}' is missing supplier/publisher info", explanations)
+    has_hash = _inspect_field(c, "hash", ("Unknown",), f"Component '{name}' is missing cryptographic hash", explanations)
+    has_dep = 1 if "direct" in c else 0
+    
+    return has_version, has_purl, has_license, has_supplier, has_hash, has_dep
 
 def calculate_quality_score(components):
     """Engine 14: SBOM Quality / Completeness Engine"""
@@ -214,45 +244,17 @@ def calculate_quality_score(components):
     license_count = 0
     supplier_count = 0
     hash_count = 0
-    dependency_count = 0 # tracking direct/transitive relationships
+    dependency_count = 0
     
     explanations = []
     for c in components:
-        name = c["name"]
-        
-        # 1. Version Coverage
-        if c.get("version") and c["version"] != "UNKNOWN":
-            version_count += 1
-        else:
-            explanations.append(f"Component '{name}' is missing an exact version")
-            
-        # 2. PURL Coverage
-        if c.get("purl") and c["purl"].startswith("pkg:"):
-            purl_count += 1
-        else:
-            explanations.append(f"Component '{name}' is missing a Package URL (PURL)")
-            
-        # 3. License Coverage
-        if c.get("license") and c["license"] != "Unknown" and c["license"] != "NOASSERTION":
-            license_count += 1
-        else:
-            explanations.append(f"Component '{name}' is missing declared license metadata")
-            
-        # 4. Supplier Coverage
-        if c.get("supplier") and c["supplier"] != "Unknown":
-            supplier_count += 1
-        else:
-            explanations.append(f"Component '{name}' is missing supplier/publisher info")
-            
-        # 5. Hash Coverage
-        if c.get("hash") and c["hash"] != "Unknown":
-            hash_count += 1
-        else:
-            explanations.append(f"Component '{name}' is missing cryptographic hash")
-            
-        # 6. Dependency Coverage (depth and direct flag)
-        if "direct" in c:
-            dependency_count += 1
+        v_c, p_c, l_c, s_c, h_c, d_c = _inspect_component_quality(c, explanations)
+        version_count += v_c
+        purl_count += p_c
+        license_count += l_c
+        supplier_count += s_c
+        hash_count += h_c
+        dependency_count += d_c
             
     metrics = {
         "version_coverage": (version_count / n) * 100,
@@ -263,7 +265,6 @@ def calculate_quality_score(components):
         "dependency_coverage": (dependency_count / n) * 100
     }
     
-    # Heuristic score calculation
     score = (
         metrics["version_coverage"] * 0.25 +
         metrics["purl_coverage"] * 0.20 +

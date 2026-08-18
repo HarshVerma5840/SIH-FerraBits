@@ -168,6 +168,7 @@ def detect_dependency_confusion(component, public_package_list=None):
     Engine 23: Dependency Confusion Detection Engine
     Checks if a package name looks internal/private but might conflict with public registries.
     """
+    _ = public_package_list
     name = component["name"]
     # Indicators of internal packages: prefix, company names, or naming structures
     internal_keywords = ["internal", "private", "corp", "custom", "local", "secret", "sih"]
@@ -298,6 +299,7 @@ def evaluate_contextual_security(component, vulnerabilities, risk_assessment=Non
     Engine 33: Contextual Security Analysis Engine
     Engine 34: VEX / Vulnerability Context Engine
     """
+    _ = risk_assessment
     if not vulnerabilities:
         return {
             "vex_status": "NOT_AFFECTED",
