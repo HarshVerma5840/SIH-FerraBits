@@ -145,6 +145,15 @@ def run_anomaly_heuristic(features):
     prob = score / 100.0
     return score, prob, classification
 
+def _get_probability_level(prob):
+    if prob < 0.2:
+        return "LOW"
+    if prob < 0.5:
+        return "MEDIUM"
+    if prob < 0.8:
+        return "HIGH"
+    return "CRITICAL"
+
 def classify_malicious_dependency(component):
     """Engine 36: Malicious Dependency Classification Engine"""
     features = extract_features_vector(component)
@@ -152,17 +161,8 @@ def classify_malicious_dependency(component):
     if malicious_model and scaler:
         try:
             scaled = scaler.transform([features])
-            pred_class = malicious_model.predict(scaled)[0] # 0 = normal, 1 = suspicious
-            prob = malicious_model.predict_proba(scaled)[0][1] # probability of class 1
-            
-            if prob < 0.2:
-                level = "LOW"
-            elif prob < 0.5:
-                level = "MEDIUM"
-            elif prob < 0.8:
-                level = "HIGH"
-            else:
-                level = "CRITICAL"
+            prob = malicious_model.predict_proba(scaled)[0][1]
+            level = _get_probability_level(prob)
         except Exception as e:
             print(f"ML Malicious classification inference failure: {e}")
             level, prob = run_malicious_heuristic(features)
@@ -170,13 +170,6 @@ def classify_malicious_dependency(component):
         level, prob = run_malicious_heuristic(features)
         
     contributing_features = []
-    feature_names = [
-        "age_days", "release_frequency", "dependency_count", "dependency_growth", "maintainer_count",
-        "maintainer_changes", "has_install_script", "obfuscation_score", "network_call_count",
-        "vulnerability_history", "license_change", "reputation_score"
-    ]
-    
-    # Highlight top features contributing to risk
     if features[7] > 0.3: contributing_features.append("obfuscation_score")
     if features[6] == 1: contributing_features.append("has_install_script")
     if features[8] > 2: contributing_features.append("network_call_count")
@@ -189,7 +182,6 @@ def classify_malicious_dependency(component):
     }
 
 def run_malicious_heuristic(features):
-    # Rule-based fallback for malicious classification
     prob = 0.05
     if features[7] > 0.5: prob += 0.4
     if features[6] == 1: prob += 0.2
@@ -197,15 +189,38 @@ def run_malicious_heuristic(features):
     if features[0] < 15: prob += 0.1
     
     prob = min(prob, 1.0)
-    if prob < 0.2:
-        level = "LOW"
-    elif prob < 0.5:
-        level = "MEDIUM"
-    elif prob < 0.8:
-        level = "HIGH"
-    else:
-        level = "CRITICAL"
+    level = _get_probability_level(prob)
     return level, prob
+
+def _calc_vulnerability_points(vulnerabilities, reasons):
+    points = 0
+    if not vulnerabilities:
+        return points
+    max_cvss = max([v["cvss_score"] for v in vulnerabilities if v["cvss_score"]] or [0])
+    if max_cvss > 0:
+        points += max_cvss * 5.0
+        reasons.append(f"Contains vulnerability with CVSS {max_cvss}")
+    else:
+        sevs = [v["severity"] for v in vulnerabilities]
+        if "CRITICAL" in sevs:
+            points += 45
+            reasons.append("Contains CRITICAL severity vulnerability")
+        elif "HIGH" in sevs:
+            points += 35
+            reasons.append("Contains HIGH severity vulnerability")
+        elif "MEDIUM" in sevs:
+            points += 20
+            reasons.append("Contains MEDIUM severity vulnerability")
+    return points
+
+def _score_to_level(score):
+    if score < 30:
+        return "LOW"
+    if score < 60:
+        return "MEDIUM"
+    if score < 85:
+        return "HIGH"
+    return "CRITICAL"
 
 def prioritize_risk(component, vulnerabilities, blast_radius_info=None, anomaly_info=None):
     """
@@ -213,29 +228,9 @@ def prioritize_risk(component, vulnerabilities, blast_radius_info=None, anomaly_
     Inputs: CVSS, vulnerability severity, direct/transitive, blast radius, AI anomaly score, reputation, EOL.
     Output: Risk Score 0-100, risk level (LOW/MEDIUM/HIGH/CRITICAL), and bullet-pointed explanations.
     """
-    base_score = 0
     reasons = []
+    base_score = _calc_vulnerability_points(vulnerabilities, reasons)
     
-    # 1. Vulnerability factors
-    if vulnerabilities:
-        max_cvss = max([v["cvss_score"] for v in vulnerabilities if v["cvss_score"]] or [0])
-        if max_cvss > 0:
-            base_score += max_cvss * 5.0 # Max 50 points from CVSS
-            reasons.append(f"Contains vulnerability with CVSS {max_cvss}")
-        else:
-            # Fallback if CVSS is missing but severity exists
-            sevs = [v["severity"] for v in vulnerabilities]
-            if "CRITICAL" in sevs:
-                base_score += 45
-                reasons.append("Contains CRITICAL severity vulnerability")
-            elif "HIGH" in sevs:
-                base_score += 35
-                reasons.append("Contains HIGH severity vulnerability")
-            elif "MEDIUM" in sevs:
-                base_score += 20
-                reasons.append("Contains MEDIUM severity vulnerability")
-    
-    # 2. Dependency depth (Direct has higher threat exposure)
     is_direct = component.get("direct", True)
     if is_direct:
         base_score += 15
@@ -244,32 +239,21 @@ def prioritize_risk(component, vulnerabilities, blast_radius_info=None, anomaly_
         base_score += 5
         reasons.append("Transitive dependency")
         
-    # 3. AI Anomaly factors
     if anomaly_info:
         ai_score = anomaly_info.get("anomaly_score", 0)
         if ai_score > 60:
-            base_score += ai_score * 0.25 # Max 25 points from AI
+            base_score += ai_score * 0.25
             reasons.append(f"AI Anomaly detector flagged package as SUSPICIOUS (score: {ai_score})")
             
-    # 4. Downstream blast radius impact
     if blast_radius_info:
         impact = blast_radius_info.get("impact_score", 0)
         if impact > 0:
-            added = min(impact * 2.5, 10.0) # Max 10 points
+            added = min(impact * 2.5, 10.0)
             base_score += added
             reasons.append(f"Downstream blast radius affects {blast_radius_info.get('affected_dependents_count')} components")
             
-    # Cap final risk score at 100
     final_score = round(min(base_score, 100))
-    
-    if final_score < 30:
-        level = "LOW"
-    elif final_score < 60:
-        level = "MEDIUM"
-    elif final_score < 85:
-        level = "HIGH"
-    else:
-        level = "CRITICAL"
+    level = _score_to_level(final_score)
         
     return {
         "risk_score": final_score,
@@ -377,6 +361,17 @@ def get_remediation_recommendation(component, vulnerabilities):
         "upgrade_impact": impact
     }
 
+def _get_simulated_vulnerabilities(c, vulnerability_db_list):
+    name = c["name"]
+    version = c["version"]
+    eco = c["ecosystem"]
+    c_vulns = []
+    for vuln in vulnerability_db_list:
+        if vuln["package_name"] == name and vuln["ecosystem"] == eco:
+            if is_version_affected(version, vuln["affected_versions"]):
+                c_vulns.append(vuln)
+    return c_vulns
+
 def run_whatif_simulation(components, upgrade_purl, target_version, vulnerability_db_list):
     """
     Engine 41: What-If Risk Simulator Engine
@@ -386,42 +381,24 @@ def run_whatif_simulation(components, upgrade_purl, target_version, vulnerabilit
     # 1. Clone components list
     simulated_components = []
     upgrade_name = None
-    upgrade_eco = None
     
     for c in components:
         comp_copy = dict(c)
         if comp_copy["purl"] == upgrade_purl:
             comp_copy["version"] = target_version
-            # Recalculate purl
             comp_copy["purl"] = generate_purl(comp_copy["ecosystem"], comp_copy["name"], target_version)
             upgrade_name = comp_copy["name"]
-            upgrade_eco = comp_copy["ecosystem"]
         simulated_components.append(comp_copy)
         
-    # 2. Run simulated vulnerability analysis
-    # Match against the local DB list
-    simulated_vulns = []
-    for c in simulated_components:
-        name = c["name"]
-        version = c["version"]
-        eco = c["ecosystem"]
-        
-        c_vulns = []
-        for vuln in vulnerability_db_list:
-            if vuln["package_name"] == name and vuln["ecosystem"] == eco:
-                if is_version_affected(version, vuln["affected_versions"]):
-                    c_vulns.append(vuln)
-                    
-        c["vulnerabilities"] = c_vulns
-        
-    # 3. Recalculate risk scores
+    # 2. Run simulated vulnerability analysis & Recalculate risk scores
     total_risk = 0
     vuln_count = 0
     critical_count = 0
     high_count = 0
     
     for c in simulated_components:
-        vulns = c.get("vulnerabilities", [])
+        vulns = _get_simulated_vulnerabilities(c, vulnerability_db_list)
+        c["vulnerabilities"] = vulns
         vuln_count += len(vulns)
         for v in vulns:
             if v["severity"] == "CRITICAL":
@@ -429,7 +406,6 @@ def run_whatif_simulation(components, upgrade_purl, target_version, vulnerabilit
             elif v["severity"] == "HIGH":
                 high_count += 1
                 
-        # Basic mock risk prioritization in simulation
         c_risk = prioritize_risk(c, vulns).get("risk_score", 0)
         c["risk_score"] = c_risk
         total_risk = max(total_risk, c_risk)

@@ -14,6 +14,7 @@ class VexUpdateRequest(BaseModel):
 
 @router.get("")
 def list_vulnerabilities(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    _ = current_user
     vulns = db.query(Vulnerability).all()
     out = []
     for v in vulns:

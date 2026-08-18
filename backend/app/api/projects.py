@@ -16,41 +16,122 @@ class ProjectCreate(BaseModel):
     name: str
     description: Optional[str] = ""
 
+def _get_scan_summary(latest_scan, db):
+    if not latest_scan:
+        return 0, 0, "LOW", 100
+    vuln_count = db.query(Vulnerability).join(SBOMComponent.vulnerabilities).join(SBOM).filter(SBOM.scan_id == latest_scan.id).count()
+    risk_score = 0
+    risk_level = "LOW"
+    assessments = db.query(RiskAssessment).filter_by(scan_id=latest_scan.id).all()
+    if assessments:
+        risk_score = max([a.risk_score for a in assessments] or [0])
+        if risk_score >= 85:
+            risk_level = "CRITICAL"
+        elif risk_score >= 60:
+            risk_level = "HIGH"
+        elif risk_score >= 30:
+            risk_level = "MEDIUM"
+    quality_score = 100
+    sbom = db.query(SBOM).filter_by(scan_id=latest_scan.id).first()
+    if sbom and sbom.raw_json:
+        try:
+            from backend.app.engines.sbom_engine import calculate_quality_score, normalize_sbom
+            normalized = normalize_sbom(json.loads(sbom.raw_json))
+            quality_score = calculate_quality_score(normalized).get("score", 100)
+        except Exception:
+            pass
+    return vuln_count, risk_score, risk_level, quality_score
+
+def _load_project_scan_details(latest_scan, db):
+    components = []
+    vulnerabilities = []
+    anomalies = []
+    remediations = []
+    risk_summary = {"score": 0, "level": "LOW"}
+    quality_score = 100
+    
+    if not latest_scan:
+        return components, vulnerabilities, anomalies, remediations, risk_summary, quality_score
+        
+    sbom = db.query(SBOM).filter_by(scan_id=latest_scan.id).first()
+    if not sbom:
+        return components, vulnerabilities, anomalies, remediations, risk_summary, quality_score
+        
+    db_components = db.query(SBOMComponent).filter_by(sbom_id=sbom.id).all()
+    assessments = db.query(RiskAssessment).filter_by(scan_id=latest_scan.id).all()
+    assess_map = {a.component_purl: a for a in assessments}
+    if assessments:
+        max_score = max([a.risk_score for a in assessments] or [0])
+        level = "LOW"
+        if max_score >= 85: level = "CRITICAL"
+        elif max_score >= 60: level = "HIGH"
+        elif max_score >= 30: level = "MEDIUM"
+        risk_summary = {"score": max_score, "level": level}
+        
+    rems = db.query(RemediationRecommendation).filter_by(scan_id=latest_scan.id).all()
+    remediations = [{
+        "purl": r.component_purl,
+        "current_version": r.current_version,
+        "recommended_version": r.recommended_version,
+        "upgrade_impact": r.upgrade_impact
+    } for r in rems]
+    
+    anoms = db.query(Anomaly).filter_by(scan_id=latest_scan.id).all()
+    anoms_map = {an.component_purl: an for an in anoms}
+    anomalies = [{
+        "purl": an.component_purl,
+        "score": an.anomaly_score,
+        "probability": an.anomaly_probability,
+        "classification": an.classification,
+        "indicators": json.loads(an.indicators_json)
+    } for an in anoms]
+    
+    for c in db_components:
+        c_vulns = [{
+            "cve_id": v.cve_id,
+            "cvss_score": v.cvss_score,
+            "severity": v.severity,
+            "description": v.description
+        } for v in c.vulnerabilities]
+        vulnerabilities.extend(c_vulns)
+        
+        c_assess = assess_map.get(c.purl)
+        c_anom = anoms_map.get(c.purl)
+        
+        components.append({
+            "id": c.id,
+            "name": c.name,
+            "version": c.version,
+            "ecosystem": c.ecosystem,
+            "purl": c.purl,
+            "license": c.license,
+            "depth": c.depth,
+            "direct": c.direct,
+            "source_file": c.source_file,
+            "confidence": c.confidence,
+            "risk_score": c_assess.risk_score if c_assess else 0,
+            "risk_level": c_assess.risk_level if c_assess else "LOW",
+            "explanation": c_assess.explanation if c_assess else "No risk assessed.",
+            "anomaly_score": c_anom.anomaly_score if c_anom else 0,
+            "vulnerabilities": c_vulns
+        })
+        
+    try:
+        from backend.app.engines.sbom_engine import calculate_quality_score, normalize_sbom
+        quality_score = calculate_quality_score(components).get("score", 100)
+    except Exception:
+        pass
+        
+    return components, vulnerabilities, anomalies, remediations, risk_summary, quality_score
+
 @router.get("")
 def list_projects(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    _ = current_user
     projects = db.query(Project).all()
     out = []
     for p in projects:
-        # Fetch latest scan
         latest_scan = db.query(Scan).filter_by(project_id=p.id).order_by(Scan.created_at.desc()).first()
-        vuln_count = 0
-        risk_level = "LOW"
-        risk_score = 0
-        quality_score = 100
-        
-        if latest_scan:
-            vuln_count = db.query(Vulnerability).join(SBOMComponent.vulnerabilities).join(SBOM).filter(SBOM.scan_id == latest_scan.id).count()
-            # Max risk score
-            assessments = db.query(RiskAssessment).filter_by(scan_id=latest_scan.id).all()
-            if assessments:
-                risk_score = max([a.risk_score for a in assessments] or [0])
-                if risk_score >= 85:
-                    risk_level = "CRITICAL"
-                elif risk_score >= 60:
-                    risk_level = "HIGH"
-                elif risk_score >= 30:
-                    risk_level = "MEDIUM"
-            # Get quality score
-            sbom = db.query(SBOM).filter_by(scan_id=latest_scan.id).first()
-            if sbom and sbom.raw_json:
-                try:
-                    # Parse quality score
-                    from backend.app.engines.sbom_engine import calculate_quality_score, normalize_sbom
-                    normalized = normalize_sbom(json.loads(sbom.raw_json))
-                    quality_score = calculate_quality_score(normalized).get("score", 100)
-                except Exception:
-                    pass
-                    
+        vuln_count, risk_score, risk_level, quality_score = _get_scan_summary(latest_scan, db)
         out.append({
             "id": p.id,
             "name": p.name,
@@ -67,6 +148,7 @@ def list_projects(db: Session = Depends(get_db), current_user = Depends(get_curr
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_project(data: ProjectCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    _ = current_user
     existing = db.query(Project).filter_by(name=data.name).first()
     if existing:
         raise HTTPException(status_code=400, detail="Project with this name already exists")
@@ -78,93 +160,13 @@ def create_project(data: ProjectCreate, db: Session = Depends(get_db), current_u
 
 @router.get("/{project_id}")
 def get_project_details(project_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    _ = current_user
     project = db.query(Project).get(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
         
     latest_scan = db.query(Scan).filter_by(project_id=project_id).order_by(Scan.created_at.desc()).first()
-    
-    components = []
-    vulnerabilities = []
-    anomalies = []
-    remediations = []
-    risk_summary = {"score": 0, "level": "LOW"}
-    quality_score = 100
-    
-    if latest_scan:
-        sbom = db.query(SBOM).filter_by(scan_id=latest_scan.id).first()
-        if sbom:
-            # Load components
-            db_components = db.query(SBOMComponent).filter_by(sbom_id=sbom.id).all()
-            
-            # Map assessments by PURL
-            assessments = db.query(RiskAssessment).filter_by(scan_id=latest_scan.id).all()
-            assess_map = {a.component_purl: a for a in assessments}
-            if assessments:
-                max_score = max([a.risk_score for a in assessments] or [0])
-                level = "LOW"
-                if max_score >= 85: level = "CRITICAL"
-                elif max_score >= 60: level = "HIGH"
-                elif max_score >= 30: level = "MEDIUM"
-                risk_summary = {"score": max_score, "level": level}
-                
-            # Load Remediation Recommendations
-            rems = db.query(RemediationRecommendation).filter_by(scan_id=latest_scan.id).all()
-            remediations = [{
-                "purl": r.component_purl,
-                "current_version": r.current_version,
-                "recommended_version": r.recommended_version,
-                "upgrade_impact": r.upgrade_impact
-            } for r in rems]
-            
-            # Load Anomalies
-            anoms = db.query(Anomaly).filter_by(scan_id=latest_scan.id).all()
-            anoms_map = {an.component_purl: an for an in anoms}
-            anomalies = [{
-                "purl": an.component_purl,
-                "score": an.anomaly_score,
-                "probability": an.anomaly_probability,
-                "classification": an.classification,
-                "indicators": json.loads(an.indicators_json)
-            } for an in anoms]
-            
-            for c in db_components:
-                c_vulns = [{
-                    "cve_id": v.cve_id,
-                    "cvss_score": v.cvss_score,
-                    "severity": v.severity,
-                    "description": v.description
-                } for v in c.vulnerabilities]
-                
-                vulnerabilities.extend(c_vulns)
-                
-                c_assess = assess_map.get(c.purl)
-                c_anom = anoms_map.get(c.purl)
-                
-                components.append({
-                    "id": c.id,
-                    "name": c.name,
-                    "version": c.version,
-                    "ecosystem": c.ecosystem,
-                    "purl": c.purl,
-                    "license": c.license,
-                    "depth": c.depth,
-                    "direct": c.direct,
-                    "source_file": c.source_file,
-                    "confidence": c.confidence,
-                    "risk_score": c_assess.risk_score if c_assess else 0,
-                    "risk_level": c_assess.risk_level if c_assess else "LOW",
-                    "explanation": c_assess.explanation if c_assess else "No risk assessed.",
-                    "anomaly_score": c_anom.anomaly_score if c_anom else 0,
-                    "vulnerabilities": c_vulns
-                })
-                
-            try:
-                from backend.app.engines.sbom_engine import calculate_quality_score, normalize_sbom
-                quality_score = calculate_quality_score(components).get("score", 100)
-            except Exception:
-                pass
-                
+    components, vulnerabilities, anomalies, remediations, risk_summary, quality_score = _load_project_scan_details(latest_scan, db)
     return {
         "id": project.id,
         "name": project.name,
@@ -183,6 +185,7 @@ def get_project_details(project_id: int, db: Session = Depends(get_db), current_
 
 @router.get("/{project_id}/history")
 def get_project_history(project_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    _ = current_user
     versions = db.query(SBOMVersion).filter_by(project_id=project_id).order_by(SBOMVersion.version_number.desc()).all()
     out = []
     for v in versions:
@@ -205,6 +208,7 @@ def get_project_history(project_id: int, db: Session = Depends(get_db), current_
 
 @router.get("/{project_id}/diff/{base_id}/{head_id}")
 def get_project_diff(project_id: int, base_id: int, head_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    _ = current_user
     diff = db.query(SBOMDiff).filter_by(project_id=project_id, base_scan_id=base_id, head_scan_id=head_id).first()
     # Alternate check in case IDs are swapped or it's head/base
     if not diff:
@@ -252,6 +256,7 @@ def get_project_diff(project_id: int, base_id: int, head_id: int, db: Session = 
 
 @router.get("/{project_id}/graph")
 def get_project_graph(project_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    _ = current_user
     latest_scan = db.query(Scan).filter_by(project_id=project_id).order_by(Scan.created_at.desc()).first()
     if not latest_scan:
         raise HTTPException(status_code=404, detail="No scan data found for graph generation")
@@ -307,6 +312,7 @@ class WhatIfRequest(BaseModel):
 
 @router.post("/{project_id}/whatif")
 def simulate_whatif(project_id: int, data: WhatIfRequest, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    _ = current_user
     latest_scan = db.query(Scan).filter_by(project_id=project_id).order_by(Scan.created_at.desc()).first()
     if not latest_scan:
         raise HTTPException(status_code=404, detail="No scan data found for simulation")

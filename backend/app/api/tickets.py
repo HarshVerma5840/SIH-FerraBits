@@ -13,6 +13,7 @@ class TicketUpdate(BaseModel):
 
 @router.get("")
 def list_tickets(project_id: Optional[int] = None, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    _ = current_user
     query = db.query(Ticket)
     if project_id:
         query = query.filter_by(project_id=project_id)

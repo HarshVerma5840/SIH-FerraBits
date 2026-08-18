@@ -23,6 +23,7 @@ class PolicyUpdate(BaseModel):
 
 @router.get("")
 def list_policies(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    _ = current_user
     # Make sure some default policies exist for the demo if none are present
     policies = db.query(Policy).all()
     if not policies:

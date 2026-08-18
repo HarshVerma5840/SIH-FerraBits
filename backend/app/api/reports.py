@@ -9,6 +9,7 @@ router = APIRouter(prefix="/reports", tags=["Reports"])
 
 @router.get("/project/{project_id}/executive")
 def get_executive_report(project_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    _ = current_user
     project = db.query(Project).get(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -60,6 +61,7 @@ def get_executive_report(project_id: int, db: Session = Depends(get_db), current
 
 @router.get("/project/{project_id}/csv")
 def get_csv_report_file(project_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    _ = current_user
     project = db.query(Project).get(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -109,6 +111,7 @@ def get_csv_report_file(project_id: int, db: Session = Depends(get_db), current_
 
 @router.get("/project/{project_id}/cyclonedx")
 def download_cyclonedx_file(project_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    _ = current_user
     project = db.query(Project).get(project_id)
     latest_scan = db.query(Scan).filter_by(project_id=project_id).order_by(Scan.created_at.desc()).first()
     if not latest_scan:
@@ -125,6 +128,7 @@ def download_cyclonedx_file(project_id: int, db: Session = Depends(get_db), curr
 
 @router.get("/project/{project_id}/spdx")
 def download_spdx_file(project_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    _ = current_user
     project = db.query(Project).get(project_id)
     latest_scan = db.query(Scan).filter_by(project_id=project_id).order_by(Scan.created_at.desc()).first()
     if not latest_scan:
