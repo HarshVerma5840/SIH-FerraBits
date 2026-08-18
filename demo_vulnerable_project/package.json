@@ -1,0 +1,15 @@
+{
+  "name": "demo-ecommerce-hub",
+  "version": "1.0.4",
+  "description": "Vulnerable retail hub simulation containing multiple critical dependencies.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "lodash": "4.17.11",
+    "follow-redirects": "1.15.2",
+    "express": "4.17.1",
+    "gpl-only-package": "1.0.0"
+  }
+}
