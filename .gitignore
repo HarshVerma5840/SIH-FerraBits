@@ -152,3 +152,42 @@ temp_test_manifests/
 # GitHub App secrets & extracted code
 *.pem
 extracted_code/
+
+# --- Additional Security & Confidential Files ---
+# Environment variables
+.env.*
+!.env.example
+!.env.template
+
+# Keys and Certificates
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+*.pub
+*.keystore
+
+# Cloud and API Credentials
+credentials.json
+client_secret.json
+service_account.json
+token.json
+auth.json
+secrets.json
+.aws/
+.gcp/
+.azure/
+
+# Password managers / vaults
+*.kdbx
+
+# Terraform state (if used later)
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+# Editor & IDE (can sometimes contain local paths/secrets)
+.vscode/
+.idea/
+.fleet/
