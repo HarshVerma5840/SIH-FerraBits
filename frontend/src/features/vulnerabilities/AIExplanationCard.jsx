@@ -285,7 +285,7 @@ export default function AIExplanationCard({ findingId, inline = false }) {
           onClick={() => setExpanded(p => !p)}
           style={{
             width: '100%', padding: '8px', fontSize: '0.72rem', fontWeight: 600,
-            color: 'var(--text-muted)', background: 'rgba(255,255,255,0.02)',
+            color: 'var(--text-muted)', background: 'rgba(0,0,0,0.02)',
             borderTop: '1px solid rgba(99,102,241,0.12)', border: 'none',
             cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '4px'
           }}

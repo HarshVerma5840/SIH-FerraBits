@@ -77,14 +77,14 @@ export default function SBOMCatalog({ project, isOfflineMode, onRefresh }) {
             placeholder="Search dependencies by name..." 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ width: '100%', padding: '10px 12px 10px 40px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white' }}
+            style={{ width: '100%', padding: '10px 12px 10px 40px', borderRadius: '8px', background: 'rgba(0,0,0,0.05)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
           />
         </div>
         
         <select 
           value={selectedEcosystem} 
           onChange={(e) => setSelectedEcosystem(e.target.value)}
-          style={{ padding: '10px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white' }}
+          style={{ padding: '10px', borderRadius: '8px', background: 'rgba(0,0,0,0.05)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
         >
           <option value="all">All Ecosystems</option>
           <option value="npm">NPM (JavaScript)</option>
@@ -95,7 +95,7 @@ export default function SBOMCatalog({ project, isOfflineMode, onRefresh }) {
         <select 
           value={selectedRisk} 
           onChange={(e) => setSelectedRisk(e.target.value)}
-          style={{ padding: '10px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white' }}
+          style={{ padding: '10px', borderRadius: '8px', background: 'rgba(0,0,0,0.05)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
         >
           <option value="all">All Risk Ratings</option>
           <option value="CRITICAL">Critical Risk</option>
@@ -107,7 +107,7 @@ export default function SBOMCatalog({ project, isOfflineMode, onRefresh }) {
       {/* Table */}
       <table className="glass-panel" style={{ width: '100%', borderCollapse: 'collapse', overflow: 'hidden', textAlign: 'left' }}>
         <thead>
-          <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--border-color)' }}>
+          <tr style={{ background: 'rgba(0,0,0,0.03)', borderBottom: '1px solid var(--border-color)' }}>
             <th style={{ padding: '16px' }}>Component Name</th>
             <th style={{ padding: '16px' }}>Version</th>
             <th style={{ padding: '16px' }}>Ecosystem</th>
@@ -142,7 +142,7 @@ export default function SBOMCatalog({ project, isOfflineMode, onRefresh }) {
                     </div>
                   </td>
                   <td style={{ padding: '16px' }}>
-                    <span style={{ fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: '4px' }}>{c.ecosystem}</span>
+                    <span style={{ fontSize: '0.8rem', background: 'rgba(0,0,0,0.05)', padding: '2px 8px', borderRadius: '4px' }}>{c.ecosystem}</span>
                   </td>
                   <td style={{ padding: '16px' }}>{c.license}</td>
                   <td style={{ padding: '16px' }}>
@@ -177,7 +177,7 @@ export default function SBOMCatalog({ project, isOfflineMode, onRefresh }) {
                                 <h5 style={{ fontSize: '0.85rem', color: 'var(--critical)', marginBottom: '8px' }}>Matched Vulnerabilities ({c.vulnerabilities.length})</h5>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                   {c.vulnerabilities.map((v, i) => (
-                                    <div key={i} style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                                    <div key={i} style={{ background: 'rgba(0,0,0,0.05)', padding: '10px', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
                                       <span style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--critical)' }}>{v.cve_id} (CVSS: {v.cvss_score})</span>
                                       <p style={{ fontSize: '0.8rem', marginTop: '4px', color: 'var(--text-secondary)' }}>{v.description}</p>
                                     </div>
@@ -189,17 +189,17 @@ export default function SBOMCatalog({ project, isOfflineMode, onRefresh }) {
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                             {/* Why is this risky? Card */}
-                            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                              <h5 style={{ fontSize: '0.9rem', marginBottom: '12px', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ background: 'rgba(0,0,0,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                              <h5 style={{ fontSize: '0.9rem', marginBottom: '12px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--critical)', display: 'inline-block', boxShadow: '0 0 8px var(--critical)' }}></span>
                                 Why is this risky?
                               </h5>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                 {(c.risk_factors || []).map((factor, idx) => (
-                                  <div key={idx} style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '6px', borderLeft: `3px solid ${factor.severity === 'CRITICAL' ? 'var(--critical)' : (factor.severity === 'HIGH' ? '#f97316' : 'var(--warning)')}` }}>
+                                  <div key={idx} style={{ background: 'rgba(0,0,0,0.05)', padding: '10px', borderRadius: '6px', borderLeft: `3px solid ${factor.severity === 'CRITICAL' ? 'var(--critical)' : (factor.severity === 'HIGH' ? '#f97316' : 'var(--warning)')}` }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
-                                      <span style={{ fontWeight: 600, fontSize: '0.8rem', color: 'white' }}>{factor.title}</span>
-                                      <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px' }}>{factor.type}</span>
+                                      <span style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-primary)' }}>{factor.title}</span>
+                                      <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: '4px' }}>{factor.type}</span>
                                     </div>
                                     <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0 0 6px 0', lineHeight: 1.4 }}>{factor.description}</p>
                                     <div style={{ fontSize: '0.7rem', color: 'var(--primary)', fontFamily: 'var(--font-mono)' }}>Evidence: {factor.evidence}</div>
@@ -211,7 +211,7 @@ export default function SBOMCatalog({ project, isOfflineMode, onRefresh }) {
                               </div>
                             </div>
 
-                            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.8rem' }}>
+                            <div style={{ background: 'rgba(0,0,0,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.8rem' }}>
                               <div>
                                 <span style={{ color: 'var(--text-muted)' }}>Package PURL: </span>
                                 <span className="mono-text" style={{ wordBreak: 'break-all', display: 'block', marginTop: '2px' }}>{c.purl}</span>
@@ -236,7 +236,7 @@ export default function SBOMCatalog({ project, isOfflineMode, onRefresh }) {
                               <select 
                                 value={vexStatus} 
                                 onChange={(e) => setVexStatus(e.target.value)}
-                                style={{ padding: '8px', borderRadius: '6px', background: '#0b0f19', border: '1px solid var(--border-color)', color: 'white' }}
+                                style={{ padding: '8px', borderRadius: '6px', background: '#ffffff', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
                               >
                                 <option value="AFFECTED">AFFECTED</option>
                                 <option value="NOT_AFFECTED">NOT AFFECTED (Vulnerability unreachable)</option>
@@ -248,7 +248,7 @@ export default function SBOMCatalog({ project, isOfflineMode, onRefresh }) {
                                 placeholder="Provide exploitability justification (e.g. library functions not invoked by compiler entrypoints)..." 
                                 value={vexJustification}
                                 onChange={(e) => setVexJustification(e.target.value)}
-                                style={{ flex: 1, padding: '8px', borderRadius: '6px', background: '#0b0f19', border: '1px solid var(--border-color)', color: 'white' }}
+                                style={{ flex: 1, padding: '8px', borderRadius: '6px', background: '#ffffff', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
                               />
                               <button type="submit" className="btn-primary" style={{ padding: '8px 16px' }} disabled={isVexLoading}>
                                 {isVexLoading ? <><Spinner size={14} color="white" /> Updating...</> : 'Update VEX Statement'}

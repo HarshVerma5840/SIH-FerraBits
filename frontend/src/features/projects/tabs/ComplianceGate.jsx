@@ -13,7 +13,7 @@ export default function ComplianceGate() {
 
       <section className="glass-panel" style={{ padding: '24px' }}>
         <h4 style={{ fontSize: '1rem', marginBottom: '16px' }}>Developer Compliance Diagnostic Output</h4>
-        <pre style={{ background: '#05070c', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', color: '#ef4444', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
+        <pre style={{ background: '#ffffff', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', color: '#ef4444', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
 {`====================================================
  SBOMGUARD CI/CD GATE SECURITY ANALYSIS REPORT
  STATUS: BLOCK (Exit Code: 2)

@@ -79,7 +79,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(0,0,0, 0.04);
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
   padding: 8px 16px;
@@ -92,9 +92,9 @@
 }
 
 .remediation-back-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0,0,0, 0.08);
   color: var(--text-primary);
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(0,0,0, 0.2);
 }
 
 .remediation-title {
@@ -177,7 +177,7 @@
 }
 
 .dag-node:hover {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(0,0,0, 0.2);
   transform: scale(1.03);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }

@@ -53,7 +53,7 @@ export default function VersionDiff({ project, versionHistory, isOfflineMode }) 
           <select 
             value={selectedVersionBase}
             onChange={(e) => setSelectedVersionBase(e.target.value)}
-            style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#0b0f19', border: '1px solid var(--border-color)', color: 'white' }}
+            style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#ffffff', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
           >
             <option value="">-- Choose Base --</option>
             {versionHistory.map(v => (
@@ -67,7 +67,7 @@ export default function VersionDiff({ project, versionHistory, isOfflineMode }) 
           <select 
             value={selectedVersionHead}
             onChange={(e) => setSelectedVersionHead(e.target.value)}
-            style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#0b0f19', border: '1px solid var(--border-color)', color: 'white' }}
+            style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#ffffff', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
           >
             <option value="">-- Choose Head --</option>
             {versionHistory.map(v => (

@@ -99,7 +99,7 @@ function ConfidenceBar({ level }) {
   const m = map[level] || map.UNKNOWN;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-      <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.07)' }}>
+      <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: 'rgba(0,0,0,0.07)' }}>
         <div style={{ width: m.w, height: '100%', borderRadius: '2px', background: m.color, transition: 'width 0.4s' }} />
       </div>
       <span style={{ fontSize: '0.7rem', fontWeight: 700, color: m.color, minWidth: 52 }}>{level}</span>
@@ -269,7 +269,7 @@ function VersionEvidenceCard({ component, anomaly }) {
             <div style={{
               fontFamily: 'var(--font-mono)', fontSize: '0.68rem',
               wordBreak: 'break-all', color: 'var(--text-muted)', marginTop: '2px',
-              padding: '6px 8px', borderRadius: '5px', background: 'rgba(255,255,255,0.03)',
+              padding: '6px 8px', borderRadius: '5px', background: 'rgba(0,0,0,0.03)',
               border: '1px solid var(--border-color)',
             }}>
               {component.purl}
@@ -344,7 +344,7 @@ function RiskAnalysisCard({ risk }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div style={{ position: 'relative', flexShrink: 0 }}>
             <svg width={72} height={72} style={{ transform: 'rotate(-90deg)' }}>
-              <circle cx={36} cy={36} r={28} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={7} />
+              <circle cx={36} cy={36} r={28} fill="none" stroke="rgba(0,0,0,0.06)" strokeWidth={7} />
               <circle cx={36} cy={36} r={28} fill="none"
                 stroke={sevColor.border} strokeWidth={7}
                 strokeDasharray={2 * Math.PI * 28}
@@ -605,7 +605,7 @@ function FindingDetail({ finding }) {
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.9rem', color: 'white' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
               {component?.name}
             </span>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: sevColor.text }}>
@@ -667,9 +667,9 @@ function FindingRow({ finding }) {
         style={{
           borderBottom: open ? 'none' : '1px solid var(--border-color)',
           cursor: 'pointer', transition: 'background 0.12s',
-          background: open ? 'rgba(255,255,255,0.02)' : 'transparent',
+          background: open ? 'rgba(0,0,0,0.02)' : 'transparent',
         }}
-        onMouseEnter={e => !open && (e.currentTarget.style.background = 'rgba(255,255,255,0.025)')}
+        onMouseEnter={e => !open && (e.currentTarget.style.background = 'rgba(0,0,0,0.025)')}
         onMouseLeave={e => !open && (e.currentTarget.style.background = 'transparent')}
       >
         {/* Toggle */}
@@ -730,8 +730,8 @@ function FindingRow({ finding }) {
         {/* Ecosystem */}
         <td style={{ padding: '13px 12px' }}>
           <span style={{
-            fontSize: '0.72rem', background: 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.08)',
+            fontSize: '0.72rem', background: 'rgba(0,0,0,0.05)',
+            border: '1px solid rgba(0,0,0,0.08)',
             padding: '3px 8px', borderRadius: '4px',
           }}>{component?.ecosystem || '—'}</span>
         </td>
@@ -928,8 +928,8 @@ export default function VulnerabilitiesPage({ isOfflineMode }) {
             onChange={e => setSearch(e.target.value)}
             style={{
               width: '100%', padding: '9px 14px 9px 30px', borderRadius: '8px',
-              background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)',
-              color: 'white', fontSize: '0.82rem', boxSizing: 'border-box',
+              background: 'rgba(0,0,0,0.05)', border: '1px solid var(--border-color)',
+              color: 'var(--text-primary)', fontSize: '0.82rem', boxSizing: 'border-box',
             }}
           />
         </div>
@@ -938,8 +938,8 @@ export default function VulnerabilitiesPage({ isOfflineMode }) {
           onChange={e => setFilterSource(e.target.value)}
           style={{
             padding: '9px 12px', borderRadius: '8px',
-            background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)',
-            color: 'white', fontSize: '0.82rem',
+            background: 'rgba(0,0,0,0.05)', border: '1px solid var(--border-color)',
+            color: 'var(--text-primary)', fontSize: '0.82rem',
           }}
         >
           <option value="all">All Sources</option>
@@ -970,7 +970,7 @@ export default function VulnerabilitiesPage({ isOfflineMode }) {
         <div className="glass-panel" style={{ overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
-              <tr style={{ background: 'rgba(255,255,255,0.025)', borderBottom: '1px solid var(--border-color)' }}>
+              <tr style={{ background: 'rgba(0,0,0,0.025)', borderBottom: '1px solid var(--border-color)' }}>
                 <th style={{ width: 22, padding: '11px 8px 11px 16px' }} />
                 <th style={{ width: 4, padding: '11px 0' }} />
                 <th style={{ padding: '11px 12px', fontSize: '0.7rem', fontWeight: 800, color: 'var(--text-muted)', letterSpacing: '0.06em' }}>CVE / ID</th>

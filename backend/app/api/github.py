@@ -9,6 +9,7 @@ import hashlib
 import json
 import shutil
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
+from fastapi.responses import RedirectResponse, HTMLResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
@@ -17,7 +18,9 @@ from backend.app.models.database import (
     Scan, Project, Repository, AuditLog, GitHubInstallation
 )
 from backend.app.services.github_app import (
-    get_installation_token, list_accessible_repos, list_branches
+    get_installation_token, list_accessible_repos, list_branches,
+    exchange_code_for_user_token, get_user_installations, get_user_installation_repos,
+    GITHUB_CLIENT_ID
 )
 from backend.app.services.code_fetcher import CodeFetcher
 from backend.app.services.scan_pipeline import run_scan_pipeline
@@ -38,6 +41,83 @@ class BranchListRequest(BaseModel):
     installation_id: str
     owner: str
     repo: str
+
+
+# ──────────────────────────── User OAuth Flow ────────────────────────────
+
+@router.get("/login")
+def github_login():
+    """Redirect to GitHub for App authorization"""
+    if not GITHUB_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="GITHUB_CLIENT_ID not configured")
+    # Request authorization for the app (no scope needed for fine-grained app installation access)
+    url = f"https://github.com/login/oauth/authorize?client_id={GITHUB_CLIENT_ID}&redirect_uri=http://localhost:8000/api/github/callback"
+    return RedirectResponse(url)
+
+
+@router.get("/callback")
+def github_callback(code: str = None, installation_id: str = None, setup_action: str = None):
+    """
+    Handle GitHub's redirect after authorization or app installation.
+    If it's an installation redirect, it might not have a code.
+    If it's a login redirect, it will have a code.
+    """
+    if not code:
+        # If the user just installed the app, GitHub redirects here but without a code.
+        # We can just tell the frontend to close the window and try login again, or handle it.
+        html_content = """
+        <html>
+            <script>
+                window.close();
+            </script>
+        </html>
+        """
+        return HTMLResponse(content=html_content)
+
+    try:
+        token = exchange_code_for_user_token(code)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Send the token back to the frontend window that opened this popup via postMessage
+    html_content = f"""
+    <html>
+        <body>
+            <p>Authenticating...</p>
+            <script>
+                window.opener.postMessage({{ type: 'github_oauth', token: '{token}' }}, '*');
+                window.close();
+            </script>
+        </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
+
+@router.get("/user/repos")
+def get_oauth_user_repos(github_token: str):
+    """
+    Use the user's OAuth access token to list their installations and the repos
+    they have granted access to within those installations.
+    """
+    try:
+        installations = get_user_installations(github_token)
+        all_repos = []
+        for inst in installations:
+            inst_id = str(inst["id"])
+            repos = get_user_installation_repos(github_token, inst_id)
+            for r in repos:
+                all_repos.append({
+                    "installation_id": inst_id,
+                    "full_name": r["full_name"],
+                    "owner": r["owner"]["login"],
+                    "name": r["name"],
+                    "private": r["private"],
+                    "default_branch": r.get("default_branch", "main"),
+                })
+        return {"repositories": all_repos}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 # ──────────────────────────── Repo & Branch Listing ────────────────────────────

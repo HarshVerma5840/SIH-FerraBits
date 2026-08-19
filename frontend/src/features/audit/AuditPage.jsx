@@ -9,7 +9,7 @@ export default function AuditPage({ auditLogs, isLoading }) {
       <div className="glass-panel" style={{ padding: '24px' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', overflow: 'hidden', textAlign: 'left' }}>
           <thead>
-            <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border-color)' }}>
+            <tr style={{ background: 'rgba(0,0,0,0.02)', borderBottom: '1px solid var(--border-color)' }}>
               <th style={{ padding: '16px' }}>Timestamp</th>
               <th style={{ padding: '16px' }}>Operator</th>
               <th style={{ padding: '16px' }}>Compliance Action</th>

@@ -14,7 +14,7 @@ from pydantic import BaseModel
 router = APIRouter(prefix="/scans", tags=["Scans"])
 
 # Temporary workspace directory for scanning uploads
-TEMP_SCAN_BASE = r"C:\Users\5430\.gemini\antigravity\temp_scans"
+TEMP_SCAN_BASE = os.path.join(os.getcwd(), "temp_scans")
 
 class LocalScanRequest(BaseModel):
     project_id: int
@@ -201,6 +201,10 @@ def scan_github_repo(
         status="PENDING",
         scan_source="github",
         github_repo_url=repo_url,
+        github_installation_id=data.installation_id,
+        github_owner=data.owner,
+        github_repo=data.repo,
+        github_branch=data.branch,
         triggered_by=current_user.username
     )
     db.add(scan)
@@ -249,7 +253,105 @@ def _run_github_scan_and_cleanup(
         # 2. Run the scan pipeline on the fetched code
         target_dir = os.path.join(fetcher.extraction_base_path, scan_uuid)
         run_scan_pipeline(project_id, scan_id, target_dir, db)
+        
+    except Exception as e:
+        scan = db.query(Scan).get(scan_id)
+        if scan:
+            scan.status = "FAILED"
+            scan.stage_status = "FAILED"
+            scan.stage_message = f"GitHub fetch error: {str(e)}"
+            if scan.log is None:
+                scan.log = ""
+            scan.log += f"\n[ERROR] GitHub fetch failed: {str(e)}\n"
+            db.commit()
 
     finally:
         # 3. Cleanup extracted code
         fetcher.cleanup(scan_uuid)
+
+
+# ──────────────────────────── GitHub Re-scan ────────────────────────────
+
+class RescanRequest(BaseModel):
+    project_id: int
+
+@router.post("/github/rescan")
+def rescan_github_repo(
+    background_tasks: BackgroundTasks,
+    data: RescanRequest,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Re-scan a GitHub project using stored metadata from a previous GitHub scan.
+    No need for the user to re-provide installation_id, owner, repo, branch.
+    """
+    project = db.query(Project).get(data.project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Find the most recent GitHub scan for this project that has metadata
+    prev_github_scan = (
+        db.query(Scan)
+        .filter_by(project_id=data.project_id, scan_source="github")
+        .filter(Scan.github_owner.isnot(None))
+        .order_by(Scan.created_at.desc())
+        .first()
+    )
+    if not prev_github_scan or not prev_github_scan.github_owner:
+        raise HTTPException(
+            status_code=400,
+            detail="No previous GitHub scan metadata found for this project. Please re-import."
+        )
+
+    owner = prev_github_scan.github_owner
+    repo = prev_github_scan.github_repo
+    branch = prev_github_scan.github_branch or "main"
+    installation_id = prev_github_scan.github_installation_id
+    repo_url = prev_github_scan.github_repo_url
+
+    if not installation_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No GitHub installation ID stored. Please re-import the project via GitHub."
+        )
+
+    # Create new scan record
+    scan = Scan(
+        project_id=data.project_id,
+        status="PENDING",
+        scan_source="github",
+        github_repo_url=repo_url,
+        github_installation_id=installation_id,
+        github_owner=owner,
+        github_repo=repo,
+        github_branch=branch,
+        triggered_by=current_user.username
+    )
+    db.add(scan)
+    db.commit()
+    db.refresh(scan)
+
+    # Audit log
+    audit_rec = AuditLog(
+        username=current_user.username,
+        action="scan_triggered",
+        details=f"Re-scan triggered (scan {scan.id}) for '{owner}/{repo}' (branch: {branch}) on project '{project.name}'",
+        ip_address="127.0.0.1"
+    )
+    db.add(audit_rec)
+    db.commit()
+
+    # Schedule GitHub fetch + scan pipeline in background
+    background_tasks.add_task(
+        _run_github_scan_and_cleanup,
+        data.project_id, scan.id,
+        installation_id, owner, repo, branch,
+        db
+    )
+
+    return {
+        "scan_id": scan.id,
+        "status": "PENDING",
+        "message": f"GitHub re-scan scheduled for {owner}/{repo} (branch: {branch})"
+    }

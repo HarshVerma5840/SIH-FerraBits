@@ -8,7 +8,7 @@ export default function PageHeader() {
         <h1 style={{ fontSize: '2.2rem', marginTop: '4px' }}>AI Compliance & Assessment Platform</h1>
       </div>
       
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: 'rgba(255,255,255,0.03)', padding: '8px 16px', borderRadius: '30px', border: '1px solid var(--border-color)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: 'rgba(0,0,0,0.03)', padding: '8px 16px', borderRadius: '30px', border: '1px solid var(--border-color)' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
           <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Security Operations Center</span>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Role: Administrator</span>

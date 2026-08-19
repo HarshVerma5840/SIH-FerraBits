@@ -45,7 +45,7 @@ export default function TicketsPage({ tickets, isLoading, onUpdateTicketStatus }
         <select 
           value={filter} 
           onChange={(e) => setFilter(e.target.value)}
-          style={{ padding: '8px', borderRadius: '6px', background: '#0b0f19', border: '1px solid var(--border-color)', color: 'white' }}
+          style={{ padding: '8px', borderRadius: '6px', background: '#ffffff', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
         >
           <option value="ALL">All Tickets</option>
           <option value="OPEN">Open</option>
@@ -57,7 +57,7 @@ export default function TicketsPage({ tickets, isLoading, onUpdateTicketStatus }
       <div className="glass-panel" style={{ padding: '24px' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', overflow: 'hidden', textAlign: 'left' }}>
           <thead>
-            <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border-color)' }}>
+            <tr style={{ background: 'rgba(0,0,0,0.02)', borderBottom: '1px solid var(--border-color)' }}>
               <th style={{ padding: '16px' }}>Ticket ID</th>
               <th style={{ padding: '16px' }}>Package / Component</th>
               <th style={{ padding: '16px' }}>Severity</th>

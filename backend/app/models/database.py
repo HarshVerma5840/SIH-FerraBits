@@ -75,6 +75,10 @@ class Scan(Base):
     status = Column(String(50), default="PENDING") # PENDING, RUNNING, COMPLETED, FAILED
     scan_source = Column(String(50), default="local") # local, upload, github
     github_repo_url = Column(String(500), nullable=True) # set when scan_source is 'github'
+    github_installation_id = Column(String(100), nullable=True)
+    github_owner = Column(String(200), nullable=True)
+    github_repo = Column(String(200), nullable=True)
+    github_branch = Column(String(100), nullable=True)
     triggered_by = Column(String(100), default="system")
     started_at = Column(DateTime, default=get_utc_now)
     created_at = Column(DateTime, default=get_utc_now)

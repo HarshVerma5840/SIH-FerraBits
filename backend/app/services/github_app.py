@@ -9,6 +9,8 @@ import requests
 
 # GitHub App configuration from environment variables
 GITHUB_APP_ID = os.getenv("GITHUB_APP_ID")
+GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
+GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 GITHUB_PRIVATE_KEY_PATH = os.getenv("GITHUB_PRIVATE_KEY_PATH", "vulnera-graybox.pem")
 
 
@@ -116,3 +118,42 @@ def list_branches(installation_token: str, owner: str, repo: str) -> list[str]:
         raise Exception(f"Failed to fetch branches: {response.status_code} - {response.text}")
 
     return [branch["name"] for branch in response.json()]
+
+
+def exchange_code_for_user_token(code: str) -> str:
+    response = requests.post(
+        "https://github.com/login/oauth/access_token",
+        headers={"Accept": "application/json"},
+        data={
+            "client_id": GITHUB_CLIENT_ID,
+            "client_secret": GITHUB_CLIENT_SECRET,
+            "code": code
+        }
+    )
+    if response.status_code != 200 or "error" in response.json():
+        raise Exception(f"Failed to exchange token: {response.text}")
+    return response.json()["access_token"]
+
+
+def get_user_installations(user_token: str) -> list[dict]:
+    headers = {
+        "Authorization": f"Bearer {user_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
+    }
+    response = requests.get("https://api.github.com/user/installations", headers=headers)
+    if response.status_code != 200:
+        raise Exception(f"Failed to fetch user installations: {response.text}")
+    return response.json().get("installations", [])
+
+
+def get_user_installation_repos(user_token: str, installation_id: str) -> list[dict]:
+    headers = {
+        "Authorization": f"Bearer {user_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
+    }
+    response = requests.get(f"https://api.github.com/user/installations/{installation_id}/repositories", headers=headers)
+    if response.status_code != 200:
+        raise Exception(f"Failed to fetch installation repos: {response.text}")
+    return response.json().get("repositories", [])

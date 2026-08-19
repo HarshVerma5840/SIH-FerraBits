@@ -30,13 +30,19 @@ export default function ProjectDetail({ projectId, isOfflineMode, onBack, onScan
     versionHistory,
     scanProgress, scanMessage, scanLogs, scanDetails,
     triggerScan,
+    triggerGithubRescan,
+    triggerZipRescan,
     fetchProjectDetails,
   } = useProjectDetails(isOfflineMode);
 
   // Fetch data on mount / when projectId changes
   useEffect(() => {
-    fetchProjectDetails(projectId);
-  }, [projectId, fetchProjectDetails]);
+    fetchProjectDetails(projectId).then(success => {
+      if (success === false) {
+        onBack();
+      }
+    });
+  }, [projectId, fetchProjectDetails, onBack]);
 
   if (isLoading || !selectedProject) {
     return <PageLoader label="Loading project asset data..." />;
@@ -60,11 +66,14 @@ export default function ProjectDetail({ projectId, isOfflineMode, onBack, onScan
 
       {/* Trigger Scan Panel */}
       <ScanPanel 
+        project={selectedProject}
         scanProgress={scanProgress}
         scanMessage={scanMessage}
         scanLogs={scanLogs}
         scanDetails={scanDetails}
         onTriggerScan={(path) => triggerScan(projectId, path, onScanComplete)}
+        onGithubRescan={() => triggerGithubRescan(projectId, onScanComplete)}
+        onZipRescan={(file) => triggerZipRescan(projectId, file, onScanComplete)}
       />
 
       {/* Subnavigation Tabs */}

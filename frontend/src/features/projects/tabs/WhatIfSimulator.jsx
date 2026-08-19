@@ -64,7 +64,7 @@ export default function WhatIfSimulator({ project, isOfflineMode }) {
             <select 
               value={whatIfPurl} 
               onChange={(e) => setWhatIfPurl(e.target.value)}
-              style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#0b0f19', border: '1px solid var(--border-color)', color: 'white' }}
+              style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#ffffff', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
             >
               <option value="">-- Choose package to upgrade --</option>
               {project?.components
@@ -82,7 +82,7 @@ export default function WhatIfSimulator({ project, isOfflineMode }) {
               placeholder="e.g. 2.15.0" 
               value={whatIfVersion}
               onChange={(e) => setWhatIfVersion(e.target.value)}
-              style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#0b0f19', border: '1px solid var(--border-color)', color: 'white' }}
+              style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#ffffff', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
             />
           </div>
 

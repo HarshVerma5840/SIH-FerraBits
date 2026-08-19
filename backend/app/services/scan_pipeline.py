@@ -22,7 +22,7 @@ from backend.app.engines import (
     compute_cross_project_intelligence, evaluate_contextual_security,
     query_osv_vulnerabilities, query_osv_with_offline_fallback,
     build_dependency_graph, calculate_blast_radius, classify_license,
-    run_anomaly_detection, classify_malicious_dependency,
+    analyze_dependency,
     prioritize_risk, analyze_supply_chain_behavior,
     generate_security_explanation, get_remediation_recommendation,
     evaluate_policy, run_cicd_gate, format_developer_feedback
@@ -91,40 +91,43 @@ def _profile_single_component(comp_data, scan, existing_vulns, db):
     )
     comp_model.evidence.append(evidence_rec)
     
-    # Run ML Anomaly Detection (Engine 35)
-    anomaly_res = run_anomaly_detection(comp_data)
-    comp_data["anomaly_score"] = anomaly_res["anomaly_score"]
+    # Run ML Anomaly Detection (Phase 5 Prototype - Engine 35 & 36)
+    ai_res = analyze_dependency(comp_data)
+    comp_data["anomaly_score"] = ai_res["anomaly_score"]
+    comp_data["is_malicious"] = ai_res["classification"] == "SUSPICIOUS"
     
     # Save ML predictions into MLPrediction table
     ml_pred_anomaly = MLPrediction(
         component_purl=purl,
-        prediction_type="anomaly",
-        features_json=json.dumps(anomaly_res.get("indicators", [])),
-        prediction_output_json=json.dumps(anomaly_res),
-        confidence_score=anomaly_res["anomaly_probability"]
+        scan_id=scan.id,
+        model_name="prototype_heuristic_model",
+        prediction_type="anomaly_score",
+        result_value=str(ai_res["anomaly_score"]),
+        confidence=0.8,
+        features_json=json.dumps({"signals": ai_res["signals"]})
     )
-    scan.ml_predictions.append(ml_pred_anomaly)
+    db.add(ml_pred_anomaly)
+    
+    ml_pred_malicious = MLPrediction(
+        component_purl=purl,
+        scan_id=scan.id,
+        model_name="prototype_heuristic_model",
+        prediction_type="malicious_classification",
+        result_value=str(comp_data["is_malicious"]),
+        confidence=0.8,
+        features_json=json.dumps(ai_res["signals"])
+    )
+    db.add(ml_pred_malicious)
     
     # Add Anomaly Record
     anomaly_rec = Anomaly(
         component_purl=purl,
-        anomaly_score=anomaly_res["anomaly_score"],
-        anomaly_probability=anomaly_res["anomaly_probability"],
-        classification=anomaly_res["classification"],
-        indicators_json=json.dumps(anomaly_res["indicators"])
+        anomaly_score=ai_res["anomaly_score"],
+        anomaly_probability=0.8,
+        classification=ai_res["classification"],
+        indicators_json=json.dumps(ai_res["signals"])
     )
     scan.anomalies.append(anomaly_rec)
-    
-    # Run ML Malicious Classification (Engine 36 / 22)
-    malicious_res = classify_malicious_dependency(comp_data)
-    ml_pred_malicious = MLPrediction(
-        component_purl=purl,
-        prediction_type="malicious_classifier",
-        features_json=json.dumps(malicious_res.get("contributing_features", [])),
-        prediction_output_json=json.dumps(malicious_res),
-        confidence_score=malicious_res["probability"]
-    )
-    scan.ml_predictions.append(ml_pred_malicious)
     
     # Run Dependency Confusion checks (Engine 23)
     _ = detect_dependency_confusion(comp_data)
@@ -381,6 +384,10 @@ def _run_post_scan_phase(project_id, scan, project, sbom_model, cyclonedx_sbom, 
     
     _log_msg(f"Scan complete. Gate decision: {gate_res['status']}.", logs)
     scan.status = "COMPLETED"
+    scan.overall_progress = 100
+    scan.current_stage = "FINALIZING"
+    scan.stage_status = "COMPLETED"
+    scan.stage_message = f"Scan complete. Gate decision: {gate_res['status']}."
     scan.completed_at = datetime.now(timezone.utc)
     scan.log = "\n".join(logs)
     db.commit()
@@ -426,7 +433,7 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
         ]
         
         # 2. RUN SECURITY & ML ANALYSIS
-        existing_vulns = {v.cve_id: v for v in db.query(Vulnerability).all()}
+        existing_vulns = {v.vulnerability_id: v for v in db.query(Vulnerability).all()}
         processed_components = []
         components_for_graph = []
         purl_to_comp_obj = {}
@@ -484,39 +491,28 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
             comp_model.evidence.append(evidence_rec)
             
             # Run ML Anomaly Detection (Engine 35)
-            anomaly_res = run_anomaly_detection(comp_data)
+            anomaly_res = analyze_dependency(comp_data)
             comp_data["anomaly_score"] = anomaly_res["anomaly_score"]
             
             # Save ML predictions into MLPrediction table
             ml_pred_anomaly = MLPrediction(
                 component_purl=purl,
                 prediction_type="anomaly",
-                features_json=json.dumps(anomaly_res.get("indicators", [])),
+                features_json=json.dumps(anomaly_res.get("signals", anomaly_res.get("indicators", []))),
                 prediction_output_json=json.dumps(anomaly_res),
-                confidence_score=anomaly_res["anomaly_probability"]
+                confidence_score=anomaly_res.get("anomaly_probability", anomaly_res.get("anomaly_score", 0) / 100.0)
             )
             scan.ml_predictions.append(ml_pred_anomaly)
             
             # Add Anomaly Record
             anomaly_rec = Anomaly(
                 component_purl=purl,
-                anomaly_score=anomaly_res["anomaly_score"],
-                anomaly_probability=anomaly_res["anomaly_probability"],
-                classification=anomaly_res["classification"],
-                indicators_json=json.dumps(anomaly_res["indicators"])
+                anomaly_score=anomaly_res.get("anomaly_score", 0),
+                anomaly_probability=anomaly_res.get("anomaly_probability", anomaly_res.get("anomaly_score", 0) / 100.0),
+                classification=anomaly_res.get("classification", "UNKNOWN"),
+                indicators_json=json.dumps(anomaly_res.get("indicators", anomaly_res.get("signals", [])))
             )
             scan.anomalies.append(anomaly_rec)
-            
-            # Run ML Malicious Classification (Engine 36 / 22)
-            malicious_res = classify_malicious_dependency(comp_data)
-            ml_pred_malicious = MLPrediction(
-                component_purl=purl,
-                prediction_type="malicious_classifier",
-                features_json=json.dumps(malicious_res.get("contributing_features", [])),
-                prediction_output_json=json.dumps(malicious_res),
-                confidence_score=malicious_res["probability"]
-            )
-            scan.ml_predictions.append(ml_pred_malicious)
             
             # Run Dependency Confusion checks (Engine 23)
             confusion_res = detect_dependency_confusion(comp_data)
@@ -735,22 +731,16 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
             verification_status=verification_status
         )
         
-        # 4. SBOM COMPILING, SIGNING & VALIDATION
-        sbom_model, cyclonedx_sbom, quality_score_res = _run_sbom_compilation_phase(
-            project_id, scan_id, project, components_for_graph, processed_components, graph_data, pending_dependencies, logs, db
-        )
+        db.add(sbom_model)
+        db.commit()
+        db.refresh(sbom_model)
+        
+        quality_score_res = calculate_quality_score(components_for_graph)
         
         # 5. POST SCAN PHASE (GATES, HISTORY, DIFF, COMPLETED STATUS)
         _run_post_scan_phase(
             project_id, scan, project, sbom_model, cyclonedx_sbom, quality_score_res, components_for_graph, logs, db
         )
-        db.add(audit_rec)
-        
-        update_progress("FINALIZING", f"Scan complete. Gate decision: {gate_res['status']}.", 100, "COMPLETED")
-        scan.status = "COMPLETED"
-        scan.completed_at = datetime.utcnow()
-        scan.log = "\n".join(logs)
-        db.commit()
         
     except Exception as e:
         err_msg = traceback.format_exc()

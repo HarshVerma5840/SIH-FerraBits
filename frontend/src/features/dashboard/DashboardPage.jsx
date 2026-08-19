@@ -10,7 +10,7 @@ export default function DashboardPage({ projects, tickets, isLoading, isOfflineM
 
       {/* Platform Overview KPI Card */}
       <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', width: 'fit-content' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '12px' }}>
           <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
             <Activity size={18} color="var(--primary)" />
           </div>
@@ -75,7 +75,7 @@ function KpiItem({ icon, label, value }) {
 function ProjectCard({ project: p, onInspect }) {
   const badgeClass = p.risk_level === 'CRITICAL' ? 'badge-critical' : (p.risk_level === 'HIGH' ? 'badge-high' : 'badge-low');
   return (
-    <div className="glass-panel" style={{ padding: '20px', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <div className="glass-panel" style={{ padding: '20px', background: 'rgba(0,0,0,0.01)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <h4 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{p.name}</h4>
         <span className={`badge ${badgeClass}`}>{p.risk_level} RISK</span>

@@ -19,7 +19,7 @@ class ProjectCreate(BaseModel):
 def _get_scan_summary(latest_scan, db):
     if not latest_scan:
         return 0, 0, "LOW", 100
-    vuln_count = db.query(Vulnerability).join(SBOMComponent.vulnerabilities).join(SBOM).filter(SBOM.scan_id == latest_scan.id).count()
+    vuln_count = db.query(SecurityFinding).filter(SecurityFinding.scan_id == latest_scan.id).count()
     risk_score = 0
     risk_level = "LOW"
     assessments = db.query(RiskAssessment).filter_by(scan_id=latest_scan.id).all()
@@ -86,13 +86,22 @@ def _load_project_scan_details(latest_scan, db):
         "indicators": json.loads(an.indicators_json)
     } for an in anoms]
     
+    findings = db.query(SecurityFinding).filter(SecurityFinding.scan_id == latest_scan.id).all()
+    vuln_map = {}
+    for f in findings:
+        vuln = db.query(Vulnerability).filter_by(vulnerability_id=f.vulnerability_id).first()
+        if vuln:
+            if f.component_purl not in vuln_map:
+                vuln_map[f.component_purl] = []
+            vuln_map[f.component_purl].append({
+                "cve_id": vuln.vulnerability_id,
+                "cvss_score": vuln.cvss_score,
+                "severity": vuln.severity_level,
+                "description": vuln.summary
+            })
+
     for c in db_components:
-        c_vulns = [{
-            "cve_id": v.cve_id,
-            "cvss_score": v.cvss_score,
-            "severity": v.severity,
-            "description": v.description
-        } for v in c.vulnerabilities]
+        c_vulns = vuln_map.get(c.purl, [])
         vulnerabilities.extend(c_vulns)
         
         c_assess = assess_map.get(c.purl)
@@ -166,6 +175,8 @@ def get_project_details(project_id: int, db: Session = Depends(get_db), current_
         raise HTTPException(status_code=404, detail="Project not found")
         
     latest_scan = db.query(Scan).filter_by(project_id=project_id).order_by(Scan.created_at.desc()).first()
+    # Check if this project was ever imported from GitHub
+    github_scan = db.query(Scan).filter_by(project_id=project_id, scan_source="github").first()
     components, vulnerabilities, anomalies, remediations, risk_summary, quality_score = _load_project_scan_details(latest_scan, db)
     return {
         "id": project.id,
@@ -174,6 +185,8 @@ def get_project_details(project_id: int, db: Session = Depends(get_db), current_
         "created_at": project.created_at,
         "latest_scan_id": latest_scan.id if latest_scan else None,
         "latest_scan_status": latest_scan.status if latest_scan else "NEVER_SCANNED",
+        "latest_scan_source": github_scan.scan_source if github_scan else (latest_scan.scan_source if latest_scan else "local"),
+        "latest_scan_github_url": github_scan.github_repo_url if github_scan else None,
         "latest_scan_logs": latest_scan.log if latest_scan else "",
         "components": components,
         "vulnerabilities": vulnerabilities,
@@ -182,6 +195,17 @@ def get_project_details(project_id: int, db: Session = Depends(get_db), current_
         "risk_summary": risk_summary,
         "quality_score": quality_score
     }
+
+@router.delete("/{project_id}", status_code=status.HTTP_200_OK)
+def delete_project(project_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    _ = current_user
+    project = db.query(Project).get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+        
+    db.delete(project)
+    db.commit()
+    return {"message": "Project deleted successfully"}
 
 @router.get("/{project_id}/history")
 def get_project_history(project_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):

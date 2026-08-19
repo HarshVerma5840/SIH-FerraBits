@@ -26,7 +26,7 @@ function FactorBar({ points, maxPoints }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
       <div style={{
         flex: 1, height: '4px', borderRadius: '2px',
-        background: 'rgba(255,255,255,0.08)'
+        background: 'rgba(0,0,0,0.08)'
       }}>
         <div style={{
           width: `${pct}%`, height: '100%', borderRadius: '2px',
@@ -57,7 +57,7 @@ function FactorCard({ factor }) {
           width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
           background: sevDot, boxShadow: `0 0 5px ${sevDot}80`
         }} />
-        <span style={{ fontWeight: 700, fontSize: '0.8rem', color: 'white', flex: 1 }}>
+        <span style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-primary)', flex: 1 }}>
           {factor.title}
         </span>
         <span style={{
@@ -100,7 +100,7 @@ function ScoreRing({ score, level }) {
   return (
     <div style={{ position: 'relative', width: 90, height: 90, flexShrink: 0 }}>
       <svg width="90" height="90" style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx="45" cy="45" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="8" />
+        <circle cx="45" cy="45" r={r} fill="none" stroke="rgba(0,0,0,0.06)" strokeWidth="8" />
         <circle cx="45" cy="45" r={r} fill="none"
           stroke={color} strokeWidth="8"
           strokeDasharray={circ}

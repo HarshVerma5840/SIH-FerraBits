@@ -37,7 +37,7 @@ export default function Sidebar({ activeTab, onTabChange, isOfflineMode, onSync 
         <div>
           <h2 style={{
             fontSize: '1.2rem', fontWeight: 800,
-            background: 'linear-gradient(to right, #ffffff, #9ca3af)',
+            background: 'linear-gradient(to right, #111827, #4b5563)',
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
           }}>SBOMGuard AI</h2>
           <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.05em' }}>
@@ -71,7 +71,7 @@ export default function Sidebar({ activeTab, onTabChange, isOfflineMode, onSync 
       {/* Connection status */}
       <div style={{
         marginTop: 'auto', padding: '16px',
-        background: 'rgba(255, 255, 255, 0.03)',
+        background: 'transparent',
         borderRadius: '12px', border: '1px solid var(--border-color)',
         display: 'flex', flexDirection: 'column', gap: '8px',
       }}>

@@ -29,7 +29,7 @@ export function PageLoader({ label = 'Loading…' }) {
 
 // ── Skeleton shimmer pulse ────────────────────────────────────────────────────
 const shimmerStyle = {
-  background: 'linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%)',
+  background: 'linear-gradient(90deg, rgba(0,0,0,0.04) 25%, rgba(0,0,0,0.08) 50%, rgba(0,0,0,0.04) 75%)',
   backgroundSize: '200% 100%',
   animation: 'shimmer 1.6s infinite',
   borderRadius: '6px',

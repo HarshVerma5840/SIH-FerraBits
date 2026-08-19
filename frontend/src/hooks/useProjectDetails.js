@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { API_BASE, MOCK_PROJECTS, MOCK_COMPONENTS, MOCK_VERSION_HISTORY } from '../constants/mock';
 
 /**
@@ -15,6 +15,57 @@ export function useProjectDetails(isOfflineMode) {
   const [scanMessage, setScanMessage] = useState('');
   const [scanLogs, setScanLogs] = useState('');
   const [scanDetails, setScanDetails] = useState(null);
+  
+  // Track active polling interval to avoid duplicates
+  const pollingRef = useRef(null);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, []);
+
+  // Start polling a scan by ID
+  const startPolling = useCallback((scanId, projId, onComplete) => {
+    // Clear any existing polling
+    if (pollingRef.current) clearInterval(pollingRef.current);
+
+    const interval = setInterval(async () => {
+      try {
+        const [statusRes, logsRes] = await Promise.all([
+          fetch(`${API_BASE}/api/scans/${scanId}/status`),
+          fetch(`${API_BASE}/api/scans/${scanId}/logs`),
+        ]);
+        if (statusRes.ok) {
+          const data = await statusRes.json();
+          const { status } = data;
+          setScanDetails(data);
+          if (logsRes.ok) setScanLogs((await logsRes.json()).logs);
+          if (status === 'COMPLETED') {
+            clearInterval(interval);
+            pollingRef.current = null;
+            setScanProgress(false);
+            setScanMessage('Scan completed successfully.');
+            fetchProjectDetails(projId);
+            onComplete?.();
+          } else if (status === 'FAILED') {
+            clearInterval(interval);
+            pollingRef.current = null;
+            setScanProgress(false);
+            setScanMessage('Scan failed. Review diagnostic logs.');
+          }
+        }
+      } catch {
+        clearInterval(interval);
+        pollingRef.current = null;
+        setScanProgress(false);
+        setScanMessage('Lost connection during scan polling.');
+      }
+    }, 1500);
+
+    pollingRef.current = interval;
+  }, []);  // fetchProjectDetails is added as dependency below via the definition order
 
   const fetchProjectDetails = useCallback(async (projId) => {
     if (!projId) return;
@@ -53,16 +104,34 @@ export function useProjectDetails(isOfflineMode) {
           fetch(`${API_BASE}/api/projects/${projId}`),
           fetch(`${API_BASE}/api/projects/${projId}/history`),
         ]);
-        if (detailRes.status === 'fulfilled' && detailRes.value.ok)
-          setSelectedProject(await detailRes.value.json());
+        if (detailRes.status === 'fulfilled' && detailRes.value.ok) {
+          const projectData = await detailRes.value.json();
+          setSelectedProject(projectData);
+          
+          // Auto-detect and poll any running/pending scan
+          if (projectData.latest_scan_id && 
+              (projectData.latest_scan_status === 'RUNNING' || projectData.latest_scan_status === 'PENDING')) {
+            setScanProgress(true);
+            setScanMessage(`Scan in progress (ID: ${projectData.latest_scan_id}). Polling status...`);
+            setScanDetails({ current_stage: 'INITIALIZING', overall_progress: 0, stage_status: 'RUNNING' });
+            startPolling(projectData.latest_scan_id, projId);
+          }
+        } else {
+          setIsLoading(false);
+          return false; // Return false to indicate not found
+        }
+        
         if (historyRes.status === 'fulfilled' && historyRes.value.ok)
           setVersionHistory(await historyRes.value.json());
       } catch (e) {
         console.error('[SBOMGuard] Failed to load project details', e);
+        setIsLoading(false);
+        return false;
       }
     }
     setIsLoading(false);
-  }, [isOfflineMode]);
+    return true;
+  }, [isOfflineMode, startPolling]);
 
   const triggerScan = useCallback(async (projId, scanPath, onComplete) => {
     if (!scanPath) return;
@@ -101,42 +170,75 @@ export function useProjectDetails(isOfflineMode) {
         }
         const { scan_id } = await r.json();
         setScanMessage(`Scan initiated (ID: ${scan_id}). Polling status...`);
-
-        const interval = setInterval(async () => {
-          try {
-            const [statusRes, logsRes] = await Promise.all([
-              fetch(`${API_BASE}/api/scans/${scan_id}/status`),
-              fetch(`${API_BASE}/api/scans/${scan_id}/logs`),
-            ]);
-            if (statusRes.ok) {
-              const data = await statusRes.json();
-              const { status } = data;
-              setScanDetails(data);
-              if (logsRes.ok) setScanLogs((await logsRes.json()).logs);
-              if (status === 'COMPLETED') {
-                clearInterval(interval);
-                setScanProgress(false);
-                setScanMessage('Scan completed successfully.');
-                fetchProjectDetails(projId);
-                onComplete?.();
-              } else if (status === 'FAILED') {
-                clearInterval(interval);
-                setScanProgress(false);
-                setScanMessage('Scan failed. Review diagnostic logs.');
-              }
-            }
-          } catch {
-            clearInterval(interval);
-            setScanProgress(false);
-            setScanMessage('Lost connection during scan polling.');
-          }
-        }, 1500);
+        startPolling(scan_id, projId, onComplete);
       } catch (e) {
         setScanProgress(false);
         setScanMessage(`Network error: ${e.message}`);
       }
     }
-  }, [isOfflineMode, fetchProjectDetails]);
+  }, [isOfflineMode, fetchProjectDetails, startPolling]);
+
+  const triggerGithubRescan = useCallback(async (projId, onComplete) => {
+    setScanProgress(true);
+    setScanMessage('Contacting GitHub for latest code...');
+    setScanLogs('Initiating GitHub re-scan...\n');
+    setScanDetails({ current_stage: 'INITIALIZING', overall_progress: 0, stage_status: 'RUNNING' });
+
+    try {
+      const r = await fetch(`${API_BASE}/api/scans/github/rescan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: projId }),
+      });
+      if (!r.ok) {
+        const errText = await r.text();
+        setScanProgress(false);
+        setScanMessage(`Error: ${errText}`);
+        setScanDetails(null);
+        return;
+      }
+      const { scan_id } = await r.json();
+      setScanMessage(`GitHub re-scan initiated (ID: ${scan_id}). Polling status...`);
+      startPolling(scan_id, projId, onComplete);
+    } catch (e) {
+      setScanProgress(false);
+      setScanMessage(`Network error: ${e.message}`);
+      setScanDetails(null);
+    }
+  }, [startPolling]);
+
+  const triggerZipRescan = useCallback(async (projId, file, onComplete) => {
+    if (!file) return;
+    setScanProgress(true);
+    setScanMessage('Uploading ZIP archive...');
+    setScanLogs('Initiating ZIP upload scan...\n');
+    setScanDetails({ current_stage: 'INITIALIZING', overall_progress: 0, stage_status: 'RUNNING' });
+
+    try {
+      const formData = new FormData();
+      formData.append('project_id', projId);
+      formData.append('file', file);
+
+      const r = await fetch(`${API_BASE}/api/scans/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!r.ok) {
+        const errText = await r.text();
+        setScanProgress(false);
+        setScanMessage(`Upload error: ${errText}`);
+        setScanDetails(null);
+        return;
+      }
+      const { scan_id } = await r.json();
+      setScanMessage(`ZIP scan initiated (ID: ${scan_id}). Polling status...`);
+      startPolling(scan_id, projId, onComplete);
+    } catch (e) {
+      setScanProgress(false);
+      setScanMessage(`Network error: ${e.message}`);
+      setScanDetails(null);
+    }
+  }, [startPolling]);
 
   return {
     isLoading,
@@ -146,5 +248,7 @@ export function useProjectDetails(isOfflineMode) {
     setScanMessage, setScanLogs,
     fetchProjectDetails,
     triggerScan,
+    triggerGithubRescan,
+    triggerZipRescan,
   };
 }

@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { usePlatformData } from './hooks/usePlatformData';
+import { API_BASE } from './constants/mock';
 
 // Components
 import Sidebar from './components/Sidebar';
@@ -52,8 +53,8 @@ function AuthScreen({
   MOCK_PROJECTS, MOCK_TICKETS, MOCK_AUDIT, MOCK_POLICIES
 }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#0b0f19', color: 'white', padding: '20px', fontFamily: 'system-ui, sans-serif' }}>
-      <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '32px', background: 'rgba(15, 23, 42, 0.45)', border: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', flexDirection: 'column', gap: '24px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.8), 0 10px 10px -5px rgba(0, 0, 0, 0.8)' }}>
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#ffffff', color: 'var(--text-primary)', padding: '20px', fontFamily: 'system-ui, sans-serif' }}>
+      <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '32px', background: 'var(--bg-card)', border: '1px solid rgba(0,0,0, 0.08)', display: 'flex', flexDirection: 'column', gap: '24px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.8), 0 10px 10px -5px rgba(0, 0, 0, 0.8)' }}>
         <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
             <Shield size={36} color="var(--primary)" />
@@ -80,7 +81,7 @@ function AuthScreen({
               placeholder="Enter username" 
               value={authUsername}
               onChange={(e) => setAuthUsername(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: '#05070c', border: '1px solid var(--border-color)', color: 'white' }}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: '#ffffff', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
             />
           </div>
 
@@ -93,7 +94,7 @@ function AuthScreen({
                 placeholder="Enter email (optional)" 
                 value={authEmail}
                 onChange={(e) => setAuthEmail(e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: '#05070c', border: '1px solid var(--border-color)', color: 'white' }}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: '#ffffff', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
               />
             </div>
           )}
@@ -107,7 +108,7 @@ function AuthScreen({
               placeholder="Enter password" 
               value={authPassword}
               onChange={(e) => setAuthPassword(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: '#05070c', border: '1px solid var(--border-color)', color: 'white' }}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', background: '#ffffff', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
             />
           </div>
 
@@ -118,7 +119,7 @@ function AuthScreen({
                 id="auth-role-select"
                 value={authRole}
                 onChange={(e) => setAuthRole(e.target.value)}
-                style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#05070c', border: '1px solid var(--border-color)', color: 'white' }}
+                style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#ffffff', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
               >
                 <option value="DEVELOPER">DEVELOPER (Scan, View Policies, Tickets)</option>
                 <option value="VIEWER">VIEWER (View Dashboard only)</option>
@@ -220,9 +221,9 @@ function DashboardTab({ stats, projects, getRiskBadgeClass, setSelectedProjectId
           <h3 style={{ fontSize: '1.1rem', marginBottom: '20px' }}>Historical SBOM Completeness & Quality</h3>
           <div style={{ width: '100%', height: '240px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', padding: '10px 20px', borderBottom: '1px solid var(--border-color)', position: 'relative' }}>
             <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
-              <line x1="0" y1="20%" x2="100%" y2="20%" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
-              <line x1="0" y1="50%" x2="100%" y2="50%" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
-              <line x1="0" y1="80%" x2="100%" y2="80%" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
+              <line x1="0" y1="20%" x2="100%" y2="20%" stroke="rgba(0,0,0,0.03)" strokeWidth="1" />
+              <line x1="0" y1="50%" x2="100%" y2="50%" stroke="rgba(0,0,0,0.03)" strokeWidth="1" />
+              <line x1="0" y1="80%" x2="100%" y2="80%" stroke="rgba(0,0,0,0.03)" strokeWidth="1" />
             </svg>
             
             <svg viewBox="0 0 500 200" style={{ width: '100%', height: '100%' }}>
@@ -260,7 +261,7 @@ function DashboardTab({ stats, projects, getRiskBadgeClass, setSelectedProjectId
           <h3 style={{ fontSize: '1.1rem' }}>Active Risk Disclosures</h3>
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '160px', position: 'relative' }}>
             <svg viewBox="0 0 36 36" style={{ width: '130px', height: '130px' }}>
-              <circle cx="18" cy="18" r="15.915" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="3" />
+              <circle cx="18" cy="18" r="15.915" fill="none" stroke="rgba(0,0,0,0.05)" strokeWidth="3" />
               <circle cx="18" cy="18" r="15.915" fill="none" stroke="var(--critical)" strokeWidth="3.2" 
                 strokeDasharray="20 80" strokeDashoffset="25" 
               />
@@ -311,7 +312,7 @@ function DashboardTab({ stats, projects, getRiskBadgeClass, setSelectedProjectId
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
           {projects.map(p => (
-            <div key={p.id} className="glass-panel" style={{ padding: '20px', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div key={p.id} className="glass-panel" style={{ padding: '20px', background: 'rgba(0,0,0,0.01)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <h4 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{p.name}</h4>
                 <span className={`badge ${getRiskBadgeClass(p.risk_level)}`}>{p.risk_level} RISK</span>
@@ -353,7 +354,7 @@ function AuditLogsTab({ auditLogs }) {
       <div className="glass-panel" style={{ padding: '24px' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', overflow: 'hidden', textAlign: 'left' }}>
           <thead>
-            <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border-color)' }}>
+            <tr style={{ background: 'rgba(0,0,0,0.02)', borderBottom: '1px solid var(--border-color)' }}>
               <th style={{ padding: '16px' }}>Timestamp</th>
               <th style={{ padding: '16px' }}>Operator</th>
               <th style={{ padding: '16px' }}>Compliance Action</th>
@@ -429,11 +430,80 @@ export default function App() {
     ]);
   };
 
-  const handleCreateProject = (name) => {
-    setProjects(prev => [
-      ...prev,
-      { id: Date.now(), name, description: "Custom developer codebase container.", created_at: new Date().toISOString(), latest_scan_status: "NEVER_SCANNED", vulnerability_count: 0, risk_score: 0, risk_level: "LOW", quality_score: 100 }
-    ]);
+  const handleImportProject = async (data) => {
+    try {
+      if (isOfflineMode) {
+        // Mock fallback for demo
+        const newProj = { id: Date.now(), name: data.project.name, description: data.project.description, created_at: new Date().toISOString(), latest_scan_status: "PENDING", vulnerability_count: 0, risk_score: 0, risk_level: "LOW", quality_score: 100 };
+        setProjects(prev => [...prev, newProj]);
+        setSelectedProjectId(newProj.id);
+        return;
+      }
+
+      // 1. Create Project Shell
+      const projRes = await fetch(`${API_BASE}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data.project)
+      });
+      if (!projRes.ok) throw new Error(await projRes.text());
+      const project = await projRes.json();
+      
+      // 2. Trigger appropriate scan API
+      if (data.type === 'github') {
+        const scanRes = await fetch(`${API_BASE}/api/scans/github`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project_id: project.id,
+            ...data.github
+          })
+        });
+        if (!scanRes.ok) throw new Error(await scanRes.text());
+      } else if (data.type === 'zip') {
+        const formData = new FormData();
+        formData.append('project_id', project.id);
+        formData.append('file', data.file);
+        
+        const scanRes = await fetch(`${API_BASE}/api/scans/upload`, {
+          method: 'POST',
+          body: formData
+        });
+        if (!scanRes.ok) throw new Error(await scanRes.text());
+      }
+      
+      // 3. Update UI
+      loadPlatformData(); // refresh projects list
+      setSelectedProjectId(project.id); // navigate to Project Details page
+      
+    } catch (e) {
+      alert(`Failed to import project: ${e.message}`);
+    }
+  };
+
+  const handleDeleteProject = async (projectId) => {
+    if (!window.confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
+      return;
+    }
+    try {
+      if (isOfflineMode) {
+        setProjects(prev => prev.filter(p => p.id !== projectId));
+        return;
+      }
+      
+      const res = await fetch(`${API_BASE}/api/projects/${projectId}`, {
+        method: 'DELETE',
+      });
+      
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      
+      loadPlatformData();
+      
+    } catch (e) {
+      alert(`Failed to delete project: ${e.message}`);
+    }
   };
 
   return (
@@ -467,7 +537,8 @@ export default function App() {
             projects={projects} 
             isLoading={isLoading}
             onSelectProject={setSelectedProjectId}
-            onCreateProject={handleCreateProject}
+            onImportProject={handleImportProject}
+            onDeleteProject={handleDeleteProject}
           />
         )}
 

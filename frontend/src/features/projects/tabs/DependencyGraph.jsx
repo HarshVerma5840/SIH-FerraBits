@@ -9,30 +9,30 @@ export default function DependencyGraph() {
     <div className="animate-fade-in glass-panel" style={{ padding: '24px', display: 'grid', gridTemplateColumns: '2fr 1.2fr', gap: '24px' }}>
       
       {/* SVG Graphic Canvas */}
-      <div style={{ border: '1px solid var(--border-color)', borderRadius: '12px', background: '#05070c', height: '400px', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ border: '1px solid var(--border-color)', borderRadius: '12px', background: '#ffffff', height: '400px', position: 'relative', overflow: 'hidden' }}>
         <span style={{ position: 'absolute', top: '12px', left: '12px', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>Interactive Dependency Node Graph</span>
         
         <svg style={{ width: '100%', height: '100%' }}>
           {/* Define arrows */}
           <defs>
             <marker id="arrow" viewBox="0 0 10 10" refX="20" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-              <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255,255,255,0.15)" />
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(0,0,0,0.15)" />
             </marker>
           </defs>
 
           {/* Hardcoded SVG nodes representing relations */}
           {/* Edges */}
-          <line x1="60" y1="200" x2="200" y2="100" stroke="rgba(255,255,255,0.1)" strokeWidth="2" markerEnd="url(#arrow)" />
-          <line x1="60" y1="200" x2="200" y2="200" stroke="rgba(255,255,255,0.1)" strokeWidth="2" markerEnd="url(#arrow)" />
-          <line x1="60" y1="200" x2="200" y2="300" stroke="rgba(255,255,255,0.1)" strokeWidth="2" markerEnd="url(#arrow)" />
-          <line x1="200" y1="100" x2="340" y2="100" stroke="rgba(255,255,255,0.1)" strokeWidth="2" markerEnd="url(#arrow)" />
+          <line x1="60" y1="200" x2="200" y2="100" stroke="rgba(0,0,0,0.1)" strokeWidth="2" markerEnd="url(#arrow)" />
+          <line x1="60" y1="200" x2="200" y2="200" stroke="rgba(0,0,0,0.1)" strokeWidth="2" markerEnd="url(#arrow)" />
+          <line x1="60" y1="200" x2="200" y2="300" stroke="rgba(0,0,0,0.1)" strokeWidth="2" markerEnd="url(#arrow)" />
+          <line x1="200" y1="100" x2="340" y2="100" stroke="rgba(0,0,0,0.1)" strokeWidth="2" markerEnd="url(#arrow)" />
           
           {/* Node: Application Root */}
           <circle cx="60" cy="200" r="22" fill="#6366f1" style={{ cursor: 'pointer' }} onClick={() => {
             setSelectedGraphNode({ name: "Application Root", version: "1.0.0", risk_score: 0, purl: "root", description: "Your target scanned project repository workspace." });
             setGraphBlastRadius(null);
           }} />
-          <text x="60" y="235" fill="white" fontSize="10" textAnchor="middle" fontWeight="bold">Application</text>
+          <text x="60" y="235" fill="var(--text-primary)" fontSize="10" textAnchor="middle" fontWeight="bold">Application</text>
           
           {/* Node: lodash */}
           <circle cx="200" cy="100" r="18" fill="var(--high)" style={{ cursor: 'pointer' }} onClick={() => {
@@ -69,7 +69,7 @@ export default function DependencyGraph() {
         <h4 style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>Threat Path Intelligence</h4>
         
         {selectedGraphNode ? (
-          <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ background: 'rgba(0,0,0,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Node Name:</span>
               <h5 style={{ fontSize: '1rem', fontWeight: 700 }}>{selectedGraphNode.name}</h5>
@@ -87,7 +87,7 @@ export default function DependencyGraph() {
             {graphBlastRadius && (
               <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: '8px' }}>
                 <span style={{ fontSize: '0.8rem', color: 'var(--high)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>Blast Radius: {graphBlastRadius.count} Downstream dependents affected</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.05)', padding: '6px', borderRadius: '4px' }}>
                   <GitBranch size={12} /> <span className="mono-text">{graphBlastRadius.path}</span>
                 </div>
               </div>

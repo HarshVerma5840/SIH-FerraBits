@@ -32,7 +32,7 @@ export default function PoliciesPage({ policies, onTogglePolicy, onCreatePolicy 
           <h4 style={{ fontSize: '1.1rem', marginBottom: '16px' }}>Active Compliance Rules</h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {policies.map(p => (
-              <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)' }}>
+              <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', borderRadius: '8px', background: 'rgba(0,0,0,0.02)', border: '1px solid var(--border-color)' }}>
                 <div>
                   <h5 style={{ fontWeight: 700 }}>{p.name}</h5>
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Rule: {p.rule_type} {p.rule_condition} &rarr; Action: <strong>{p.action}</strong></span>
@@ -63,7 +63,7 @@ export default function PoliciesPage({ policies, onTogglePolicy, onCreatePolicy 
                 placeholder="e.g. Block high anomaly packages" 
                 value={form.name}
                 onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
-                style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#0b0f19', border: '1px solid var(--border-color)', color: 'white' }}
+                style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#ffffff', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
               />
             </div>
 
@@ -72,7 +72,7 @@ export default function PoliciesPage({ policies, onTogglePolicy, onCreatePolicy 
               <select 
                 value={form.type} 
                 onChange={(e) => setForm(f => ({ ...f, type: e.target.value }))}
-                style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#0b0f19', border: '1px solid var(--border-color)', color: 'white' }}
+                style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#ffffff', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
               >
                 <option value="CVSS_THRESHOLD">CVSS Vulnerability Threshold</option>
                 <option value="AI_ANOMALY">AI Anomaly Score</option>
@@ -87,7 +87,7 @@ export default function PoliciesPage({ policies, onTogglePolicy, onCreatePolicy 
                 placeholder="e.g. >= 9.0 or FORBIDDEN" 
                 value={form.condition}
                 onChange={(e) => setForm(f => ({ ...f, condition: e.target.value }))}
-                style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#0b0f19', border: '1px solid var(--border-color)', color: 'white' }}
+                style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#ffffff', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
               />
             </div>
 
@@ -96,7 +96,7 @@ export default function PoliciesPage({ policies, onTogglePolicy, onCreatePolicy 
               <select 
                 value={form.action} 
                 onChange={(e) => setForm(f => ({ ...f, action: e.target.value }))}
-                style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#0b0f19', border: '1px solid var(--border-color)', color: 'white' }}
+                style={{ width: '100%', padding: '10px', borderRadius: '6px', background: '#ffffff', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
               >
                 <option value="BLOCK">BLOCK (Break CI Build)</option>
                 <option value="REVIEW">REVIEW (Log Warn Ticket)</option>
