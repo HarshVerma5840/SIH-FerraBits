@@ -64,11 +64,9 @@ from backend.app.engines.license_engine import (
     classify_license,
 )
 
-# ── ML Inference (anomaly detection + suspicious scoring) ────────────────────
+# ── ML Inference (anomaly detection prototype) ───────────────────────────────
 from backend.app.engines.ai_engine import (
-    build_features_vector as extract_features_vector,
-    run_anomaly_detection,
-    classify_malicious_dependency,
+    analyze_dependency,
 )
 
 # ── Risk Assessment (combines security + graph + ML signals) ─────────────────

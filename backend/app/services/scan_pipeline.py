@@ -22,7 +22,7 @@ from backend.app.engines import (
     compute_cross_project_intelligence, evaluate_contextual_security,
     query_osv_vulnerabilities, query_osv_with_offline_fallback,
     build_dependency_graph, calculate_blast_radius, classify_license,
-    run_anomaly_detection, classify_malicious_dependency,
+    analyze_dependency,
     prioritize_risk, analyze_supply_chain_behavior,
     generate_security_explanation, get_remediation_recommendation,
     evaluate_policy, run_cicd_gate, format_developer_feedback
@@ -91,17 +91,17 @@ def _profile_single_component(comp_data, scan, existing_vulns, db):
     )
     comp_model.evidence.append(evidence_rec)
     
-    # Run ML Anomaly Detection (Engine 35)
-    anomaly_res = run_anomaly_detection(comp_data)
+    # Run Prototype Anomaly Detection (Engine 35)
+    anomaly_res = analyze_dependency(comp_data)
     comp_data["anomaly_score"] = anomaly_res["anomaly_score"]
     
     # Save ML predictions into MLPrediction table
     ml_pred_anomaly = MLPrediction(
         component_purl=purl,
-        prediction_type="anomaly",
-        features_json=json.dumps(anomaly_res.get("indicators", [])),
+        prediction_type="anomaly_prototype",
+        features_json=json.dumps(anomaly_res.get("signals", [])),
         prediction_output_json=json.dumps(anomaly_res),
-        confidence_score=anomaly_res["anomaly_probability"]
+        confidence_score=1.0 # Deterministic prototype
     )
     scan.ml_predictions.append(ml_pred_anomaly)
     
@@ -109,22 +109,11 @@ def _profile_single_component(comp_data, scan, existing_vulns, db):
     anomaly_rec = Anomaly(
         component_purl=purl,
         anomaly_score=anomaly_res["anomaly_score"],
-        anomaly_probability=anomaly_res["anomaly_probability"],
+        anomaly_probability=1.0,
         classification=anomaly_res["classification"],
-        indicators_json=json.dumps(anomaly_res["indicators"])
+        indicators_json=json.dumps(anomaly_res["signals"])
     )
     scan.anomalies.append(anomaly_rec)
-    
-    # Run ML Malicious Classification (Engine 36 / 22)
-    malicious_res = classify_malicious_dependency(comp_data)
-    ml_pred_malicious = MLPrediction(
-        component_purl=purl,
-        prediction_type="malicious_classifier",
-        features_json=json.dumps(malicious_res.get("contributing_features", [])),
-        prediction_output_json=json.dumps(malicious_res),
-        confidence_score=malicious_res["probability"]
-    )
-    scan.ml_predictions.append(ml_pred_malicious)
     
     # Run Dependency Confusion checks (Engine 23)
     _ = detect_dependency_confusion(comp_data)
@@ -483,17 +472,17 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
             )
             comp_model.evidence.append(evidence_rec)
             
-            # Run ML Anomaly Detection (Engine 35)
-            anomaly_res = run_anomaly_detection(comp_data)
+            # Run Prototype Anomaly Detection (Engine 35)
+            anomaly_res = analyze_dependency(comp_data)
             comp_data["anomaly_score"] = anomaly_res["anomaly_score"]
             
             # Save ML predictions into MLPrediction table
             ml_pred_anomaly = MLPrediction(
                 component_purl=purl,
-                prediction_type="anomaly",
-                features_json=json.dumps(anomaly_res.get("indicators", [])),
+                prediction_type="anomaly_prototype",
+                features_json=json.dumps(anomaly_res.get("signals", [])),
                 prediction_output_json=json.dumps(anomaly_res),
-                confidence_score=anomaly_res["anomaly_probability"]
+                confidence_score=1.0
             )
             scan.ml_predictions.append(ml_pred_anomaly)
             
@@ -501,22 +490,11 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
             anomaly_rec = Anomaly(
                 component_purl=purl,
                 anomaly_score=anomaly_res["anomaly_score"],
-                anomaly_probability=anomaly_res["anomaly_probability"],
+                anomaly_probability=1.0,
                 classification=anomaly_res["classification"],
-                indicators_json=json.dumps(anomaly_res["indicators"])
+                indicators_json=json.dumps(anomaly_res["signals"])
             )
             scan.anomalies.append(anomaly_rec)
-            
-            # Run ML Malicious Classification (Engine 36 / 22)
-            malicious_res = classify_malicious_dependency(comp_data)
-            ml_pred_malicious = MLPrediction(
-                component_purl=purl,
-                prediction_type="malicious_classifier",
-                features_json=json.dumps(malicious_res.get("contributing_features", [])),
-                prediction_output_json=json.dumps(malicious_res),
-                confidence_score=malicious_res["probability"]
-            )
-            scan.ml_predictions.append(ml_pred_malicious)
             
             # Run Dependency Confusion checks (Engine 23)
             confusion_res = detect_dependency_confusion(comp_data)

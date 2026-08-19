@@ -1,80 +1,50 @@
 """
-AI Engine Facade Service.
-Responsibility: Provide the single entry point for deterministic engines to query ML logic.
+AI Engine Facade Service (Phase 5 Prototype).
+Responsibility: Provide the single entry point for ML anomaly detection.
+In this prototype phase, this uses simple heuristics rather than a trained ML model,
+but establishes the `analyze_dependency` interface for future model integration.
 """
-from backend.app.engines.ai_engine.feature_builder import build_features_vector, FEATURE_SCHEMA_VERSION
-from backend.app.engines.ai_engine.model import model_manager, MODEL_VERSION
-from backend.app.engines.ai_engine.anomaly_detector import (
-    compute_anomaly, generate_anomaly_signals,
-    compute_suspicion, generate_suspicion_signals
-)
-from backend.app.engines.ai_engine.prediction import AnomalyPredictionResult, SuspiciousDependencyResult
 
-def run_anomaly_detection(component: dict) -> dict:
+def analyze_dependency(component: dict) -> dict:
     """
-    Analyzes a component and returns an AnomalyPredictionResult dict.
-    This maintains backward compatibility with the legacy `ml_engine.run_anomaly_detection` dict return type.
+    Analyzes a component and returns a prototype anomaly prediction result.
+    This establishes the interface for future ML model integration.
     """
-    purl = component.get("purl", "UNKNOWN")
-    features = build_features_vector(component)
+    score = 0
+    signals = []
     
-    score, prob, classification = compute_anomaly(
-        features, 
-        model_manager.get_scaler(), 
-        model_manager.get_anomaly_model()
-    )
-    
-    signals = generate_anomaly_signals(features)
-    
-    # Enforce schema validation
-    result = AnomalyPredictionResult(
-        component_id=purl,
-        anomaly_score=score,
-        anomaly_probability=prob,
-        classification=classification,
-        model_version=MODEL_VERSION,
-        feature_version=FEATURE_SCHEMA_VERSION,
-        explanation_signals=signals
-    )
-    
-    # Return as dict matching the legacy API signature
-    return {
-        "anomaly_score": result.anomaly_score,
-        "anomaly_probability": round(result.anomaly_probability, 4),
-        "classification": result.classification,
-        "indicators": [s.description for s in result.explanation_signals],
-        "model_version": result.model_version,
-    }
+    # Heuristic: Age
+    # In a real model, this would be `age_days` from a registry API.
+    # We use version_source as a proxy in this prototype (e.g. unknown origin is suspicious)
+    if component.get("version_source") not in ["lockfile", "manifest"]:
+        score += 15
+        signals.append("Unverified version source origin")
+        
+    # Heuristic: Obfuscation / Hash
+    if component.get("hash_sha256", "Unknown") == "Unknown" and component.get("version_source") == "lockfile":
+        score += 20
+        signals.append("Missing cryptographic integrity hash in lockfile")
+        
+    # Heuristic: License
+    if component.get("license") in ["Unknown", "UNKNOWN", None]:
+        score += 15
+        signals.append("Unidentified or missing license")
+        
+    # Heuristic: Depth
+    if component.get("depth", 0) > 4:
+        score += 10
+        signals.append("Deeply nested transitive dependency (depth > 4)")
+        
+    # Determine classification based on score
+    if score >= 60:
+        classification = "SUSPICIOUS"
+    elif score >= 30:
+        classification = "REVIEW"
+    else:
+        classification = "NORMAL"
 
-def classify_malicious_dependency(component: dict) -> dict:
-    """
-    Analyzes a component and returns a SuspiciousDependencyResult dict.
-    (Note: Kept legacy function name `classify_malicious_dependency` for drop-in replacement,
-     but the internal terminology correctly limits scope to Suspicion Scoring per prototype rules).
-    """
-    purl = component.get("purl", "UNKNOWN")
-    features = build_features_vector(component)
-    
-    prob, classification = compute_suspicion(
-        features, 
-        model_manager.get_scaler(), 
-        model_manager.get_malicious_model()
-    )
-    
-    signals = generate_suspicion_signals(features)
-    
-    result = SuspiciousDependencyResult(
-        component_id=purl,
-        probability=prob,
-        classification=classification,
-        model_version=MODEL_VERSION,
-        feature_version=FEATURE_SCHEMA_VERSION,
-        explanation_signals=signals
-    )
-    
     return {
-        "classification": result.classification,
-        "probability": round(result.probability, 4),
-        "contributing_features": [s.feature_name for s in result.explanation_signals],
-        "model_version": result.model_version,
+        "anomaly_score": score,
+        "classification": classification,
+        "signals": signals
     }

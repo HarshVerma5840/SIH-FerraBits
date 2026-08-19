@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.security import get_db, get_current_user
 from backend.app.models.database import (
     Vulnerability, RiskAssessment, AuditLog, SecurityFinding,
-    SBOMComponent, SBOM
+    SBOMComponent, SBOM, Anomaly
 )
 from backend.app.engines.ai_engine.llm_explanation import explain_finding, is_llm_available
 from pydantic import BaseModel
@@ -37,6 +37,10 @@ def _serialize_finding(f: SecurityFinding, db: Session) -> dict:
     v = f.vulnerability
     comp = _resolve_component(db, f.component_purl, f.scan_id)
     risk = db.query(RiskAssessment).filter_by(
+        scan_id=f.scan_id, component_purl=f.component_purl
+    ).first()
+    
+    anomaly = db.query(Anomaly).filter_by(
         scan_id=f.scan_id, component_purl=f.component_purl
     ).first()
 
@@ -113,6 +117,11 @@ def _serialize_finding(f: SecurityFinding, db: Session) -> dict:
             "factors": risk_factors,
             "missing_signals": risk_missing_signals,
             "calculation_version": risk_calc_version,
+        },
+        "anomaly": {
+            "score": anomaly.anomaly_score if anomaly else 0,
+            "classification": anomaly.classification if anomaly else "UNKNOWN",
+            "signals": json.loads(anomaly.indicators_json) if anomaly and anomaly.indicators_json else []
         },
         "status": f.status,
     }
