@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { Activity, Upload, CheckCircle, Circle, Loader2, GitBranch, RefreshCw, FileArchive } from 'lucide-react';
+import { Activity, Upload, CheckCircle, Circle, Loader2, GitBranch, RefreshCw, FileArchive, Ticket } from 'lucide-react';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
+import { API_BASE } from '../../constants/mock';
 
 const PIPELINE_STAGES = [
   { id: 'INITIALIZING', label: 'Initialization' },
@@ -17,6 +18,35 @@ export default function ScanPanel({ project, scanProgress, scanMessage, scanLogs
   const [localScanPath, setLocalScanPath] = useLocalStorage('scan_path', '');
   const [selectedFile, setSelectedFile] = useState(null);
   const fileInputRef = useRef(null);
+  const [isGeneratingTickets, setIsGeneratingTickets] = useState(false);
+  const [ticketMessage, setTicketMessage] = useState('');
+
+  const handleGenerateTickets = async () => {
+    if (!project || !scanDetails || !scanDetails.id) return;
+    
+    setIsGeneratingTickets(true);
+    setTicketMessage('');
+    try {
+      const res = await fetch(`${API_BASE}/api/tickets/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: project.id,
+          scan_id: scanDetails.id
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setTicketMessage(`✅ ${data.message}`);
+      } else {
+        setTicketMessage(`❌ Error: ${data.detail || 'Failed to generate tickets'}`);
+      }
+    } catch (e) {
+      setTicketMessage('❌ Network error while generating tickets.');
+    } finally {
+      setIsGeneratingTickets(false);
+    }
+  };
 
   const handleLocalSubmit = (e) => {
     e.preventDefault();
@@ -130,6 +160,21 @@ export default function ScanPanel({ project, scanProgress, scanMessage, scanLogs
             <h4 style={{ margin: 0, fontSize: '0.95rem' }}>Scan Pipeline Progress</h4>
             <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 600 }}>{scanDetails.status === 'COMPLETED' ? 100 : (scanDetails.overall_progress || 0)}%</span>
           </div>
+          
+          {scanDetails.status === 'COMPLETED' && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px', alignItems: 'center', gap: '12px' }}>
+              {ticketMessage && <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{ticketMessage}</span>}
+              <button 
+                className="btn-primary" 
+                onClick={handleGenerateTickets}
+                disabled={isGeneratingTickets}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', padding: '8px 12px', background: 'var(--critical)', borderColor: 'var(--critical)' }}
+              >
+                {isGeneratingTickets ? <Loader2 size={16} className="animate-spin" /> : <Ticket size={16} />}
+                {isGeneratingTickets ? 'Generating...' : 'Auto-Generate Tickets'}
+              </button>
+            </div>
+          )}
           
           <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
             {/* Progress Line Background */}

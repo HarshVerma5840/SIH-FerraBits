@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Check } from 'lucide-react';
+import { Check, Trash2 } from 'lucide-react';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { SkeletonTableRows } from '../../components/Loader';
 import RemediationWorkspace from './RemediationWorkspace';
 
-export default function TicketsPage({ tickets, isLoading, onUpdateTicketStatus }) {
+export default function TicketsPage({ tickets, isLoading, onUpdateTicketStatus, onDeleteTicket }) {
   const [filter, setFilter] = useLocalStorage('tickets_filter', 'ALL');
   const [activeWorkspace, setActiveWorkspace] = useState(null);
 
@@ -97,13 +97,18 @@ export default function TicketsPage({ tickets, isLoading, onUpdateTicketStatus }
                     }}>{t.status}</span>
                   </td>
                   <td style={{ padding: '16px' }}>
-                    {t.status !== 'RESOLVED' ? (
-                      <button className="btn-secondary" onClick={() => handleAction(t)} style={{ padding: '6px 12px', fontSize: '0.75rem' }}>
-                        {t.status === 'OPEN' ? 'Start Work' : 'Resolve Ticket'}
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      {t.status !== 'RESOLVED' ? (
+                        <button className="btn-secondary" onClick={() => handleAction(t)} style={{ padding: '6px 12px', fontSize: '0.75rem' }}>
+                          {t.status === 'OPEN' ? 'Start Work' : 'Resolve Ticket'}
+                        </button>
+                      ) : (
+                        <span style={{ color: 'var(--low)', display: 'flex', alignItems: 'center', gap: '4px' }}><Check size={16} /> Closed</span>
+                      )}
+                      <button className="btn-secondary" onClick={() => onDeleteTicket && onDeleteTicket(t.ticket_id)} style={{ padding: '6px', color: 'var(--critical)', borderColor: 'rgba(239, 68, 68, 0.2)' }} title="Delete Ticket">
+                        <Trash2 size={16} />
                       </button>
-                    ) : (
-                      <span style={{ color: 'var(--low)', display: 'flex', alignItems: 'center', gap: '4px' }}><Check size={16} /> Closed</span>
-                    )}
+                    </div>
                   </td>
                 </tr>
               ))

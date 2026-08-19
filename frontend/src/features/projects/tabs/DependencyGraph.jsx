@@ -1,104 +1,497 @@
-import React, { useState } from 'react';
-import { GitBranch, HelpCircle } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { ArrowLeft, Shield, Package, Code, FileCode, MessageSquare, CheckCircle2 } from 'lucide-react';
+import './DependencyGraph.css';
 
-export default function DependencyGraph() {
-  const [selectedGraphNode, setSelectedGraphNode] = useState(null);
-  const [graphBlastRadius, setGraphBlastRadius] = useState(null);
+// ΓöÇΓöÇ Static Demo Data ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+const DEMO_TICKET = {
+  ticket_id: "SEC-7A3F1B",
+  severity: "CRITICAL",
+  risk_score: 92,
+  status: "IN_PROGRESS",
+  packages: [
+    {
+      id: "pkg-lodash",
+      name: "lodash",
+      version: "4.17.20",
+      ecosystem: "npm",
+      severity: "CRITICAL",
+      cve: "CVE-2021-23337",
+      cvss: 9.8,
+      description: "Prototype Pollution in lodash",
+      fix_version: "4.17.21",
+      methods: [
+        {
+          id: "m-merge",
+          name: "_.merge()",
+          risk: "HIGH",
+          occurrences: [
+            { id: "occ-1", file: "src/utils/deepMerge.js", line: 23, code: "const result = _.merge(userInput, defaults);" },
+            { id: "occ-2", file: "src/api/configHandler.js", line: 87, code: "_.merge(serverConfig, req.body.settings);" },
+            { id: "occ-3", file: "src/middleware/auth.js", line: 41, code: "const opts = _.merge({}, defaultOpts, userOpts);" }
+          ],
+          explanation: "_.merge() recursively merges source objects into a target without sanitizing special keys like '__proto__', 'constructor', or 'prototype'. When user-controlled input (like req.body) is passed as a source, an attacker can inject { \"__proto__\": { \"isAdmin\": true } } to pollute Object.prototype, granting escalated privileges to every object in the application."
+        },
+        {
+          id: "m-set",
+          name: "_.set()",
+          risk: "HIGH",
+          occurrences: [
+            { id: "occ-4", file: "src/services/userService.js", line: 112, code: "_.set(profile, path, value);" },
+            { id: "occ-5", file: "src/controllers/settings.js", line: 56, code: "_.set(config, req.params.key, req.body.val);" }
+          ],
+          explanation: "_.set() writes a value at a dot-separated path (e.g., 'a.b.c'). If the path comes from user input, an attacker can supply '__proto__.polluted' as the path, writing arbitrary properties to Object.prototype. This affects all objects in the runtime."
+        },
+        {
+          id: "m-setwith",
+          name: "_.setWith()",
+          risk: "MEDIUM",
+          occurrences: [
+            { id: "occ-6", file: "src/utils/transform.js", line: 34, code: "_.setWith(obj, path, val, Object);" }
+          ],
+          explanation: "Similar vector to _.set() but with a customizer function. The path-based access still permits prototype pollution when unsanitized user input controls the path argument. Lower risk because the customizer can act as a partial guard."
+        }
+      ]
+    },
+    {
+      id: "pkg-express",
+      name: "express",
+      version: "4.17.1",
+      ecosystem: "npm",
+      severity: "HIGH",
+      cve: "CVE-2024-29041",
+      cvss: 7.5,
+      description: "Open Redirect vulnerability in express",
+      fix_version: "4.19.2",
+      methods: [
+        {
+          id: "m-static",
+          name: "express.static()",
+          risk: "HIGH",
+          occurrences: [
+            { id: "occ-7", file: "src/server.js", line: 15, code: "app.use('/public', express.static('uploads'));" },
+            { id: "occ-8", file: "src/app.js", line: 8, code: "app.use(express.static(path.join(__dirname, 'dist')));" }
+          ],
+          explanation: "express.static() serves files from a directory. In versions before 4.19.2, specially crafted URLs with encoded path separators (%2e, %2f) can traverse outside the root directory, letting attackers read sensitive files like .env, package.json, or /etc/passwd on the server."
+        },
+        {
+          id: "m-redirect",
+          name: "res.redirect()",
+          risk: "MEDIUM",
+          occurrences: [
+            { id: "occ-9", file: "src/api/auth.js", line: 67, code: "res.redirect(req.query.returnUrl);" },
+            { id: "occ-10", file: "src/routes/oauth.js", line: 23, code: "res.redirect(callbackUrl);" }
+          ],
+          explanation: "res.redirect() does not validate the destination URL in older Express versions. If the redirect target comes from user input (like req.query.returnUrl), an attacker can craft a link that redirects users to a phishing site, making the attack appear legitimate because it originates from your domain."
+        }
+      ]
+    }
+  ]
+};
+
+
+// ΓöÇΓöÇ Layout Constants ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+const COL = {
+  ROOT: 60,
+  PACKAGE: 300,
+  METHOD: 560,
+  OCCURRENCE: 790,
+  EXPLANATION: 1100,
+};
+
+const NODE_HEIGHT = {
+  ROOT: 120,
+  PACKAGE: 110,
+  METHOD: 80,
+  OCCURRENCE: 70,
+  EXPLANATION: 0, // dynamic
+};
+
+const ROW_GAP = 20;
+
+
+// ΓöÇΓöÇ Edge Component ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+function DagEdge({ x1, y1, x2, y2, severity = 'default', stagger = 0 }) {
+  const midX = (x1 + x2) / 2;
+  const d = `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
 
   return (
-    <div className="animate-fade-in glass-panel" style={{ padding: '24px', display: 'grid', gridTemplateColumns: '2fr 1.2fr', gap: '24px' }}>
-      
-      {/* SVG Graphic Canvas */}
-      <div style={{ border: '1px solid var(--border-color)', borderRadius: '12px', background: '#ffffff', height: '400px', position: 'relative', overflow: 'hidden' }}>
-        <span style={{ position: 'absolute', top: '12px', left: '12px', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>Interactive Dependency Node Graph</span>
-        
-        <svg style={{ width: '100%', height: '100%' }}>
-          {/* Define arrows */}
-          <defs>
-            <marker id="arrow" viewBox="0 0 10 10" refX="20" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-              <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(0,0,0,0.15)" />
-            </marker>
-          </defs>
+    <path
+      className={`dag-edge dag-edge-${severity} stagger-${stagger}`}
+      d={d}
+    />
+  );
+}
 
-          {/* Hardcoded SVG nodes representing relations */}
-          {/* Edges */}
-          <line x1="60" y1="200" x2="200" y2="100" stroke="rgba(0,0,0,0.1)" strokeWidth="2" markerEnd="url(#arrow)" />
-          <line x1="60" y1="200" x2="200" y2="200" stroke="rgba(0,0,0,0.1)" strokeWidth="2" markerEnd="url(#arrow)" />
-          <line x1="60" y1="200" x2="200" y2="300" stroke="rgba(0,0,0,0.1)" strokeWidth="2" markerEnd="url(#arrow)" />
-          <line x1="200" y1="100" x2="340" y2="100" stroke="rgba(0,0,0,0.1)" strokeWidth="2" markerEnd="url(#arrow)" />
-          
-          {/* Node: Application Root */}
-          <circle cx="60" cy="200" r="22" fill="#6366f1" style={{ cursor: 'pointer' }} onClick={() => {
-            setSelectedGraphNode({ name: "Application Root", version: "1.0.0", risk_score: 0, purl: "root", description: "Your target scanned project repository workspace." });
-            setGraphBlastRadius(null);
-          }} />
-          <text x="60" y="235" fill="var(--text-primary)" fontSize="10" textAnchor="middle" fontWeight="bold">Application</text>
-          
-          {/* Node: lodash */}
-          <circle cx="200" cy="100" r="18" fill="var(--high)" style={{ cursor: 'pointer' }} onClick={() => {
-            setSelectedGraphNode({ name: "lodash", version: "4.17.11", risk_score: 75, purl: "pkg:npm/lodash@4.17.11", description: "Prototype pollution vulnerability present (CVE-2019-10744)." });
-            setGraphBlastRadius({ path: "Application -> lodash -> follow-redirects", count: 1 });
-          }} />
-          <text x="200" y="132" fill="var(--text-secondary)" fontSize="10" textAnchor="middle">lodash</text>
 
-          {/* Node: log4j */}
-          <circle cx="200" cy="200" r="18" fill="var(--critical)" style={{ cursor: 'pointer' }} onClick={() => {
-            setSelectedGraphNode({ name: "log4j-core", version: "2.14.0", risk_score: 95, purl: "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.0", description: "Critical JNDI RCE vulnerability present (CVE-2021-44228)." });
-            setGraphBlastRadius({ path: "Application -> log4j-core", count: 0 });
-          }} />
-          <text x="200" y="232" fill="var(--text-secondary)" fontSize="10" textAnchor="middle">log4j-core</text>
+// ΓöÇΓöÇ Severity Badge ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+function SeverityBadge({ severity }) {
+  const cls = `badge badge-${severity === 'CRITICAL' ? 'critical' : severity === 'HIGH' ? 'high' : severity === 'MEDIUM' ? 'medium' : 'low'}`;
+  return <span className={cls} style={{ fontSize: '0.65rem', padding: '2px 6px' }}>{severity}</span>;
+}
 
-          {/* Node: express */}
-          <circle cx="200" cy="300" r="18" fill="var(--low)" style={{ cursor: 'pointer' }} onClick={() => {
-            setSelectedGraphNode({ name: "express", version: "4.17.1", risk_score: 10, purl: "pkg:npm/express@4.17.1", description: "Secure, no vulnerabilities detected." });
-            setGraphBlastRadius(null);
-          }} />
-          <text x="200" y="332" fill="var(--text-secondary)" fontSize="10" textAnchor="middle">express</text>
 
-          {/* Node: follow-redirects */}
-          <circle cx="340" cy="100" r="18" fill="var(--high)" style={{ cursor: 'pointer' }} onClick={() => {
-            setSelectedGraphNode({ name: "follow-redirects", version: "1.15.2", risk_score: 65, purl: "pkg:npm/follow-redirects@1.15.2", description: "Transitive dependency of lodash containing redirect leak." });
-            setGraphBlastRadius({ path: "Application -> lodash -> follow-redirects", count: 1 });
-          }} />
-          <text x="340" y="132" fill="var(--text-secondary)" fontSize="10" textAnchor="middle">follow-redirects</text>
-        </svg>
+// ΓöÇΓöÇ Main Component ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+export default function DependencyGraph({ data: _projectData }) {
+  const data = DEMO_TICKET; // Static demo ΓÇö swap for real data later
+
+  const [expandedPackages, setExpandedPackages] = useState(new Set());
+  const [expandedMethods, setExpandedMethods] = useState(new Set());
+  const [selectedOccurrence, setSelectedOccurrence] = useState(null);
+
+  // Toggle package expansion
+  const togglePackage = (pkgId) => {
+    setExpandedPackages(prev => {
+      const next = new Set(prev);
+      if (next.has(pkgId)) {
+        next.delete(pkgId);
+        // Collapse all children
+        data.packages.find(p => p.id === pkgId)?.methods.forEach(m => {
+          setExpandedMethods(mp => { const n = new Set(mp); n.delete(m.id); return n; });
+        });
+        setSelectedOccurrence(null);
+      } else {
+        next.add(pkgId);
+      }
+      return next;
+    });
+  };
+
+  // Toggle method expansion
+  const toggleMethod = (methodId) => {
+    setExpandedMethods(prev => {
+      const next = new Set(prev);
+      if (next.has(methodId)) {
+        next.delete(methodId);
+        setSelectedOccurrence(null);
+      } else {
+        next.add(methodId);
+      }
+      return next;
+    });
+  };
+
+  // Select occurrence ΓåÆ show explanation
+  const selectOccurrence = (occId, methodId) => {
+    if (selectedOccurrence?.occId === occId) {
+      setSelectedOccurrence(null);
+    } else {
+      setSelectedOccurrence({ occId, methodId });
+    }
+  };
+
+
+  // ΓöÇΓöÇ Layout Calculation ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  const layout = useMemo(() => {
+    const nodes = [];
+    const edges = [];
+
+    // Root node
+    let totalVisibleChildren = 0;
+    data.packages.forEach(pkg => {
+      totalVisibleChildren++;
+      if (expandedPackages.has(pkg.id)) {
+        pkg.methods.forEach(m => {
+          totalVisibleChildren++;
+          if (expandedMethods.has(m.id)) {
+            totalVisibleChildren += m.occurrences.length;
+            if (selectedOccurrence && m.occurrences.some(o => o.id === selectedOccurrence.occId)) {
+              totalVisibleChildren++;
+            }
+          }
+        });
+      }
+    });
+
+    const totalHeight = Math.max(500, totalVisibleChildren * 100);
+    const rootY = totalHeight / 2 - NODE_HEIGHT.ROOT / 2;
+
+    nodes.push({
+      type: 'root',
+      id: 'root',
+      x: COL.ROOT,
+      y: rootY,
+      data: { ticket_id: data.ticket_id, severity: data.severity, risk_score: data.risk_score },
+    });
+
+    // Package nodes
+    const pkgCount = data.packages.length;
+    const pkgTotalHeight = pkgCount * NODE_HEIGHT.PACKAGE + (pkgCount - 1) * ROW_GAP;
+    let pkgStartY = rootY + NODE_HEIGHT.ROOT / 2 - pkgTotalHeight / 2;
+
+    data.packages.forEach((pkg, pi) => {
+      const pkgY = pkgStartY + pi * (NODE_HEIGHT.PACKAGE + ROW_GAP);
+
+      nodes.push({
+        type: 'package',
+        id: pkg.id,
+        x: COL.PACKAGE,
+        y: pkgY,
+        stagger: pi,
+        data: pkg,
+        expanded: expandedPackages.has(pkg.id),
+      });
+
+      edges.push({
+        x1: COL.ROOT + 180,
+        y1: rootY + NODE_HEIGHT.ROOT / 2,
+        x2: COL.PACKAGE,
+        y2: pkgY + NODE_HEIGHT.PACKAGE / 2,
+        severity: pkg.severity.toLowerCase(),
+        stagger: pi,
+      });
+
+      // Method nodes (if package expanded)
+      if (expandedPackages.has(pkg.id)) {
+        const methodCount = pkg.methods.length;
+        const methodTotalHeight = methodCount * NODE_HEIGHT.METHOD + (methodCount - 1) * ROW_GAP;
+        let methodStartY = pkgY + NODE_HEIGHT.PACKAGE / 2 - methodTotalHeight / 2;
+
+        pkg.methods.forEach((method, mi) => {
+          const methodY = methodStartY + mi * (NODE_HEIGHT.METHOD + ROW_GAP);
+
+          nodes.push({
+            type: 'method',
+            id: method.id,
+            x: COL.METHOD,
+            y: methodY,
+            stagger: mi,
+            data: method,
+            expanded: expandedMethods.has(method.id),
+          });
+
+          edges.push({
+            x1: COL.PACKAGE + 210,
+            y1: pkgY + NODE_HEIGHT.PACKAGE / 2,
+            x2: COL.METHOD,
+            y2: methodY + NODE_HEIGHT.METHOD / 2,
+            severity: method.risk.toLowerCase(),
+            stagger: mi + pkgCount,
+          });
+
+          // Occurrence nodes (if method expanded)
+          if (expandedMethods.has(method.id)) {
+            const occCount = method.occurrences.length;
+            const occTotalHeight = occCount * NODE_HEIGHT.OCCURRENCE + (occCount - 1) * (ROW_GAP / 2);
+            let occStartY = methodY + NODE_HEIGHT.METHOD / 2 - occTotalHeight / 2;
+
+            method.occurrences.forEach((occ, oi) => {
+              const occY = occStartY + oi * (NODE_HEIGHT.OCCURRENCE + ROW_GAP / 2);
+
+              nodes.push({
+                type: 'occurrence',
+                id: occ.id,
+                x: COL.OCCURRENCE,
+                y: occY,
+                stagger: oi,
+                data: occ,
+                methodId: method.id,
+                selected: selectedOccurrence?.occId === occ.id,
+              });
+
+              edges.push({
+                x1: COL.METHOD + 180,
+                y1: methodY + NODE_HEIGHT.METHOD / 2,
+                x2: COL.OCCURRENCE,
+                y2: occY + NODE_HEIGHT.OCCURRENCE / 2,
+                severity: 'default',
+                stagger: oi + pkgCount + methodCount,
+              });
+
+              // Explanation card (if occurrence selected)
+              if (selectedOccurrence?.occId === occ.id) {
+                nodes.push({
+                  type: 'explanation',
+                  id: `explain-${occ.id}`,
+                  x: COL.EXPLANATION,
+                  y: occY - 40,
+                  stagger: 0,
+                  data: {
+                    explanation: method.explanation,
+                    fix_version: data.packages.find(p => p.methods.some(m => m.id === method.id))?.fix_version,
+                    pkg_name: data.packages.find(p => p.methods.some(m => m.id === method.id))?.name,
+                  },
+                });
+
+                edges.push({
+                  x1: COL.OCCURRENCE + 260,
+                  y1: occY + NODE_HEIGHT.OCCURRENCE / 2,
+                  x2: COL.EXPLANATION,
+                  y2: occY,
+                  severity: 'default',
+                  stagger: 0,
+                });
+              }
+            });
+          }
+        });
+      }
+    });
+
+    // Calculate canvas dimensions
+    let maxX = COL.EXPLANATION + 360;
+    let maxY = 0;
+    nodes.forEach(n => {
+      const nodeBottom = n.y + (n.type === 'explanation' ? 250 : NODE_HEIGHT[n.type.toUpperCase()] || 100);
+      if (nodeBottom > maxY) maxY = nodeBottom;
+    });
+
+    return { nodes, edges, width: maxX, height: Math.max(maxY + 60, 550) };
+  }, [data, expandedPackages, expandedMethods, selectedOccurrence]);
+
+
+  // ΓöÇΓöÇ Render ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  return (
+    <div className="remediation-workspace">
+      {/* Removed Remediation Header */}
+
+      {/* Legend */}
+      <div className="dag-legend">
+        <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Legend:</span>
+        <div className="dag-legend-item">
+          <div className="dag-legend-dot" style={{ background: 'var(--primary)' }} />
+          <span>Ticket</span>
+        </div>
+        <div className="dag-legend-item">
+          <div className="dag-legend-dot" style={{ background: 'var(--critical)' }} />
+          <span>Package</span>
+        </div>
+        <div className="dag-legend-item">
+          <div className="dag-legend-dot" style={{ background: 'var(--high)' }} />
+          <span>Method</span>
+        </div>
+        <div className="dag-legend-item">
+          <div className="dag-legend-dot" style={{ background: 'var(--info)' }} />
+          <span>Occurrence</span>
+        </div>
+        <div className="dag-legend-item">
+          <div className="dag-legend-dot" style={{ background: 'var(--primary)', opacity: 0.5 }} />
+          <span>Explanation</span>
+        </div>
+        <span style={{ marginLeft: 'auto', fontStyle: 'italic' }}>Click nodes to expand ΓåÆ</span>
       </div>
 
-      {/* Blast Radius details */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        <h4 style={{ fontSize: '1.1rem', color: 'var(--primary)' }}>Threat Path Intelligence</h4>
-        
-        {selectedGraphNode ? (
-          <div style={{ background: 'rgba(0,0,0,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Node Name:</span>
-              <h5 style={{ fontSize: '1rem', fontWeight: 700 }}>{selectedGraphNode.name}</h5>
-            </div>
-            <div>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Package PURL:</span>
-              <span className="mono-text" style={{ fontSize: '0.8rem', wordBreak: 'break-all' }}>{selectedGraphNode.purl}</span>
-            </div>
-            <div>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Severity / Risk:</span>
-              <span style={{ fontWeight: 700, display: 'block', color: selectedGraphNode.risk_score > 60 ? 'var(--critical)' : 'var(--low)' }}>{selectedGraphNode.risk_score}/100</span>
-            </div>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{selectedGraphNode.description}</p>
-            
-            {graphBlastRadius && (
-              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: '8px' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--high)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>Blast Radius: {graphBlastRadius.count} Downstream dependents affected</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.05)', padding: '6px', borderRadius: '4px' }}>
-                  <GitBranch size={12} /> <span className="mono-text">{graphBlastRadius.path}</span>
+      {/* DAG Canvas */}
+      <div className="dag-canvas">
+        <div className="dag-nodes-container" style={{ width: layout.width, height: layout.height }}>
+
+          {/* SVG Edges */}
+          <svg className="dag-edges" style={{ width: layout.width, height: layout.height }}>
+            <defs>
+              <linearGradient id="edge-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="rgba(99,102,241,0.5)" />
+                <stop offset="100%" stopColor="rgba(139,92,246,0.3)" />
+              </linearGradient>
+            </defs>
+            {layout.edges.map((edge, i) => (
+              <DagEdge key={i} {...edge} />
+            ))}
+          </svg>
+
+          {/* Nodes */}
+          {layout.nodes.map((node) => {
+            if (node.type === 'root') {
+              return (
+                <div
+                  key={node.id}
+                  className="dag-node dag-root"
+                  style={{ left: node.x, top: node.y }}
+                >
+                  <div className="root-icon">
+                    <Shield size={32} color="var(--primary)" />
+                  </div>
+                  <div className="root-ticket-id">{node.data.ticket_id}</div>
+                  <div className="root-label">Risk Score: {node.data.risk_score}/100</div>
                 </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            <HelpCircle size={32} style={{ margin: '0 auto 12px auto', opacity: 0.5 }} />
-            <p>Click any node inside the canvas to trace its threat propagation path and calculate blast radius metrics.</p>
-          </div>
-        )}
+              );
+            }
+
+            if (node.type === 'package') {
+              return (
+                <div
+                  key={node.id}
+                  className={`dag-node dag-package severity-${node.data.severity.toLowerCase()} stagger-${node.stagger} ${node.expanded ? 'expanded' : ''}`}
+                  style={{ left: node.x, top: node.y }}
+                  onClick={() => togglePackage(node.id)}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                    <Package size={14} color="var(--text-muted)" />
+                    <span className="pkg-name">{node.data.name}</span>
+                  </div>
+                  <div className="pkg-version">v{node.data.version}</div>
+                  <div className="pkg-cve">{node.data.cve} ΓÇó CVSS {node.data.cvss}</div>
+                  <div className="pkg-footer">
+                    <SeverityBadge severity={node.data.severity} />
+                    <span className="pkg-expand-hint">
+                      {node.expanded ? 'Γû╛ collapse' : 'Γû╕ show methods'}
+                    </span>
+                  </div>
+                </div>
+              );
+            }
+
+            if (node.type === 'method') {
+              return (
+                <div
+                  key={node.id}
+                  className={`dag-node dag-method stagger-${node.stagger} ${node.expanded ? 'expanded' : ''}`}
+                  style={{ left: node.x, top: node.y }}
+                  onClick={() => toggleMethod(node.id)}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                    <Code size={13} color="var(--high)" />
+                    <span className="method-name">{node.data.name}</span>
+                  </div>
+                  <div className="method-risk">
+                    <SeverityBadge severity={node.data.risk} />
+                  </div>
+                  <div className="method-count">
+                    {node.expanded ? 'Γû╛ collapse' : `Γû╕ ${node.data.occurrences.length} occurrence${node.data.occurrences.length !== 1 ? 's' : ''}`}
+                  </div>
+                </div>
+              );
+            }
+
+            if (node.type === 'occurrence') {
+              return (
+                <div
+                  key={node.id}
+                  className={`dag-node dag-occurrence stagger-${node.stagger} ${node.selected ? 'expanded' : ''}`}
+                  style={{ left: node.x, top: node.y }}
+                  onClick={() => selectOccurrence(node.data.id, node.methodId)}
+                >
+                  <div className="occ-file">
+                    <FileCode size={12} />
+                    {node.data.file}:{node.data.line}
+                  </div>
+                  <div className="occ-code">{node.data.code}</div>
+                </div>
+              );
+            }
+
+            if (node.type === 'explanation') {
+              return (
+                <div
+                  key={node.id}
+                  className="dag-node dag-explanation"
+                  style={{ left: node.x, top: node.y }}
+                >
+                  <div className="explain-header">
+                    <MessageSquare size={14} />
+                    Why is this risky?
+                  </div>
+                  <div className="explain-text">{node.data.explanation}</div>
+                  {node.data.fix_version && (
+                    <div className="explain-fix">
+                      Γ£à Fix: Upgrade {node.data.pkg_name} to v{node.data.fix_version}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            return null;
+          })}
+        </div>
       </div>
     </div>
   );

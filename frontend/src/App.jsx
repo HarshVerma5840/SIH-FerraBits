@@ -421,6 +421,25 @@ export default function App() {
     setPolicies(prev => prev.map(p => p.id === pId ? { ...p, is_active: !currentStatus } : p));
   };
 
+  const handleDeleteTicket = async (ticketId) => {
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`http://127.0.0.1:8000/api/tickets/${ticketId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      setTickets(prev => prev.filter(t => t.ticket_id !== ticketId));
+      setAuditLogs(prev => [
+        { timestamp: new Date().toISOString(), username: "admin", action: "delete_ticket", details: `Deleted ticket ${ticketId}`, ip_address: "127.0.0.1" },
+        ...prev
+      ]);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleUpdateTicketStatus = (ticketId, currentStatus) => {
     const nextStatus = currentStatus === "OPEN" ? "IN_PROGRESS" : "RESOLVED";
     setTickets(prev => prev.map(t => t.ticket_id === ticketId ? { ...t, status: nextStatus } : t));
@@ -560,6 +579,7 @@ export default function App() {
             tickets={tickets} 
             isLoading={isLoading} 
             onUpdateTicketStatus={handleUpdateTicketStatus}
+            onDeleteTicket={handleDeleteTicket}
           />
         )}
 

@@ -605,14 +605,13 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
                     
         graph_data = build_dependency_graph(components_for_graph, relations)
         
-        # Save relations in Dependency table
+        # Collect relations in Dependency table for later insertion
+        pending_dependencies = []
         for edge in graph_data["edges"]:
-            dep_rel = Dependency(
-                sbom_id=0, # Will be set post-SBOM insertion
-                component_purl=edge["target"],
-                dependent_purl=edge["source"]
-            )
-            db.add(dep_rel)
+            pending_dependencies.append({
+                "component_purl": edge["target"],
+                "dependent_purl": edge["source"]
+            })
             
         # 4. RISK PRIORITIZATION & BLAST RADIUS CALCULATION (Engines 31, 33, 34, 37, 39, 40)
         update_progress("RISK_ANALYSIS", "Calculating Blast Radius, VEX Context, and Risk scores...", 60)
@@ -731,9 +730,21 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
             verification_status=verification_status
         )
         
+        for c_model in processed_components:
+            sbom_model.components.append(c_model)
+            
         db.add(sbom_model)
         db.commit()
         db.refresh(sbom_model)
+        
+        for dep in pending_dependencies:
+            dep_rel = Dependency(
+                sbom_id=sbom_model.id,
+                component_purl=dep["component_purl"],
+                dependent_purl=dep["dependent_purl"]
+            )
+            db.add(dep_rel)
+        db.commit()
         
         quality_score_res = calculate_quality_score(components_for_graph)
         

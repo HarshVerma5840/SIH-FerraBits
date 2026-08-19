@@ -28,6 +28,7 @@ export default function ProjectDetail({ projectId, isOfflineMode, onBack, onScan
     isLoading,
     selectedProject,
     versionHistory,
+    dependencyGraphData,
     scanProgress, scanMessage, scanLogs, scanDetails,
     triggerScan,
     triggerGithubRescan,
@@ -103,7 +104,7 @@ export default function ProjectDetail({ projectId, isOfflineMode, onBack, onScan
           onRefresh={() => fetchProjectDetails(projectId)} 
         />
       )}
-      {activeSubTab === 'graph' && <DependencyGraph />}
+      {activeSubTab === 'graph' && <DependencyGraph data={dependencyGraphData} />}
       {activeSubTab === 'compliance' && <ComplianceGate />}
       {activeSubTab === 'diff' && (
         <VersionDiff 

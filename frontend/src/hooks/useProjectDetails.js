@@ -15,6 +15,7 @@ export function useProjectDetails(isOfflineMode) {
   const [scanMessage, setScanMessage] = useState('');
   const [scanLogs, setScanLogs] = useState('');
   const [scanDetails, setScanDetails] = useState(null);
+  const [dependencyGraphData, setDependencyGraphData] = useState(null);
   
   // Track active polling interval to avoid duplicates
   const pollingRef = useRef(null);
@@ -40,23 +41,26 @@ export function useProjectDetails(isOfflineMode) {
         if (statusRes.ok) {
           const data = await statusRes.json();
           const { status } = data;
+          
+          setScanMessage(`Scanning... ${status}`);
           setScanDetails(data);
-          if (logsRes.ok) setScanLogs((await logsRes.json()).logs);
-          if (status === 'COMPLETED') {
+          
+          if (logsRes.ok) {
+            const logsData = await logsRes.json();
+            setScanLogs(logsData.logs);
+          }
+          
+          if (status === 'COMPLETED' || status === 'FAILED') {
             clearInterval(interval);
             pollingRef.current = null;
             setScanProgress(false);
-            setScanMessage('Scan completed successfully.');
+            setScanMessage(status === 'COMPLETED' ? 'Scan completed successfully.' : 'Scan failed. Review diagnostic logs.');
+            // Re-fetch project details to update UI
             fetchProjectDetails(projId);
             onComplete?.();
-          } else if (status === 'FAILED') {
-            clearInterval(interval);
-            pollingRef.current = null;
-            setScanProgress(false);
-            setScanMessage('Scan failed. Review diagnostic logs.');
           }
         }
-      } catch {
+      } catch (e) {
         clearInterval(interval);
         pollingRef.current = null;
         setScanProgress(false);
@@ -65,12 +69,13 @@ export function useProjectDetails(isOfflineMode) {
     }, 1500);
 
     pollingRef.current = interval;
-  }, []);  // fetchProjectDetails is added as dependency below via the definition order
+  }, []); // fetchProjectDetails is added as dependency below via the definition order
 
   const fetchProjectDetails = useCallback(async (projId) => {
     if (!projId) return;
     setIsLoading(true);
     setSelectedProject(null);
+    setDependencyGraphData(null);
 
     if (isOfflineMode) {
       const match = MOCK_PROJECTS.find(p => p.id === projId);
@@ -97,12 +102,14 @@ export function useProjectDetails(isOfflineMode) {
           })),
         });
         setVersionHistory(MOCK_VERSION_HISTORY);
+        setDependencyGraphData({ nodes: [], edges: [] });
       }
     } else {
       try {
-        const [detailRes, historyRes] = await Promise.allSettled([
+        const [detailRes, historyRes, graphRes] = await Promise.allSettled([
           fetch(`${API_BASE}/api/projects/${projId}`),
           fetch(`${API_BASE}/api/projects/${projId}/history`),
+          fetch(`${API_BASE}/api/projects/${projId}/graph`)
         ]);
         if (detailRes.status === 'fulfilled' && detailRes.value.ok) {
           const projectData = await detailRes.value.json();
@@ -123,6 +130,9 @@ export function useProjectDetails(isOfflineMode) {
         
         if (historyRes.status === 'fulfilled' && historyRes.value.ok)
           setVersionHistory(await historyRes.value.json());
+          
+        if (graphRes.status === 'fulfilled' && graphRes.value.ok)
+          setDependencyGraphData(await graphRes.value.json());
       } catch (e) {
         console.error('[SBOMGuard] Failed to load project details', e);
         setIsLoading(false);
@@ -244,6 +254,7 @@ export function useProjectDetails(isOfflineMode) {
     isLoading,
     selectedProject, setSelectedProject,
     versionHistory,
+    dependencyGraphData,
     scanProgress, scanMessage, scanLogs, scanDetails,
     setScanMessage, setScanLogs,
     fetchProjectDetails,
