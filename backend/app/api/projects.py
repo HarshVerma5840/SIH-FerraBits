@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.security import get_db, get_current_user
 from backend.app.models.database import (
     Project, Scan, SBOM, SBOMComponent, Dependency, SBOMVersion, SBOMDiff,
-    Vulnerability, RiskAssessment, Anomaly, RemediationRecommendation
+    Vulnerability, RiskAssessment, Anomaly, RemediationRecommendation, SecurityFinding
 )
 from backend.app.engines import run_whatif_simulation, build_dependency_graph, OFFLINE_VULN_DB
 from pydantic import BaseModel

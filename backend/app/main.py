@@ -2,9 +2,9 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.app.models.database import engine, Base, SessionLocal, Role, User, Policy, Project
+from backend.app.models.database import engine, Base, SessionLocal, Role, User, Policy, Project, GitHubInstallation
 from backend.app.core.security import get_password_hash
-from backend.app.api import auth, projects, scans, vulnerabilities, policies, tickets, reports, audit
+from backend.app.api import auth, projects, scans, vulnerabilities, policies, tickets, reports, audit, github
 
 # Initialize database schema tables
 Base.metadata.create_all(bind=engine)
@@ -94,6 +94,7 @@ app.include_router(policies.router, prefix="/api")
 app.include_router(tickets.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
 app.include_router(audit.router, prefix="/api")
+app.include_router(github.router, prefix="/api")
 
 @app.get("/")
 def read_root():

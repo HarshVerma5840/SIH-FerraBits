@@ -119,6 +119,7 @@ def parse_package_json(filepath, relative_path):
                 "depth": 0,
                 "type": "library",
                 "source_file": relative_path,
+                "version_source": "manifest",
                 "supplier": supplier,
                 "repository": repo,
                 "license": license_str
@@ -180,9 +181,61 @@ def parse_package_lock(filepath, relative_path):
             data = json.load(f)
             
         if "packages" in data:
+<<<<<<< HEAD
+            for pkg_path, pkg_info in data["packages"].items():
+                if not pkg_path: # Root package
+                    continue
+                # Extract package name from node_modules path
+                if "node_modules/" in pkg_path:
+                    parts = pkg_path.split("node_modules/")
+                    name = parts[-1]
+                else:
+                    name = pkg_path
+                    
+                version = pkg_info.get("version")
+                if version:
+                    license_str = pkg_info.get("license", "Unknown")
+                    integrity = pkg_info.get("integrity", "Unknown")
+                    dependencies.append({
+                        "name": name,
+                        "version": version,
+                        "ecosystem": "npm",
+                        "direct": False, # Will be resolved by correlation
+                        "depth": pkg_path.count("node_modules"),
+                        "type": "library",
+                        "source_file": relative_path,
+                        "version_source": "lockfile",
+                        "hash": integrity,
+                        "license": license_str,
+                        "dependencies": list(pkg_info.get("dependencies", {}).keys())
+                    })
+        # Legacy npm lock v1
+        elif "dependencies" in data:
+            def recurse_v1(deps_dict, depth=1):
+                for name, info in deps_dict.items():
+                    version = info.get("version")
+                    if version:
+                        integrity = info.get("integrity", "Unknown")
+                        dependencies.append({
+                            "name": name,
+                            "version": version,
+                            "ecosystem": "npm",
+                            "direct": False,
+                            "depth": depth,
+                            "type": "library",
+                            "source_file": relative_path,
+                            "version_source": "lockfile",
+                            "hash": integrity,
+                            "dependencies": list(info.get("requires", {}).keys())
+                        })
+                    if "dependencies" in info:
+                        recurse_v1(info["dependencies"], depth + 1)
+            recurse_v1(data["dependencies"])
+=======
             _parse_lock_packages(data["packages"], relative_path, dependencies)
         elif "dependencies" in data:
             _parse_lock_dependencies_v1(data["dependencies"], relative_path, dependencies)
+>>>>>>> aa70ce9d899ddd65ff93be17b470b72d189abe92
     except Exception as e:
         print(f"Error parsing package-lock.json {filepath}: {str(e)}")
     return dependencies
@@ -213,7 +266,8 @@ def parse_requirements_txt(filepath, relative_path):
                     "direct": True,
                     "depth": 0,
                     "type": "library",
-                    "source_file": relative_path
+                    "source_file": relative_path,
+                    "version_source": "manifest"
                 })
             else:
                 # Name only without strict version spec
@@ -227,7 +281,8 @@ def parse_requirements_txt(filepath, relative_path):
                         "direct": True,
                         "depth": 0,
                         "type": "library",
-                        "source_file": relative_path
+                        "source_file": relative_path,
+                        "version_source": "manifest"
                     })
     except Exception as e:
         print(f"Error parsing requirements.txt {filepath}: {str(e)}")
@@ -264,7 +319,8 @@ def parse_pom_xml(filepath, relative_path):
                     "direct": True,
                     "depth": 0,
                     "type": "library",
-                    "source_file": relative_path
+                    "source_file": relative_path,
+                    "version_source": "manifest"
                 })
     except Exception as e:
         print(f"Error parsing pom.xml {filepath}: {str(e)}")
@@ -293,7 +349,8 @@ def parse_dockerfile(filepath, relative_path):
                 "direct": True,
                 "depth": 0,
                 "type": "container",
-                "source_file": relative_path
+                "source_file": relative_path,
+                "version_source": "manifest"
             })
     except Exception as e:
         print(f"Error parsing Dockerfile {filepath}: {str(e)}")

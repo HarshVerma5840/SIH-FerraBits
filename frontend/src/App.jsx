@@ -1,44 +1,28 @@
+<<<<<<< HEAD
+import React, { useEffect } from 'react';
+import { useLocalStorage } from './hooks/useLocalStorage';
+import { usePlatformData } from './hooks/usePlatformData';
+=======
 import React, { useState, useEffect } from 'react';
 import { 
   Shield, Database, AlertTriangle, FileText, Activity, 
   GitBranch, RefreshCw, Upload, XCircle, Search, 
   Sliders, ArrowRight, Layers, Download, Check, HelpCircle
 } from 'lucide-react';
+>>>>>>> aa70ce9d899ddd65ff93be17b470b72d189abe92
 
-const API_BASE = "http://localhost:8000";
+// Components
+import Sidebar from './components/Sidebar';
+import PageHeader from './components/PageHeader';
 
-// Mock Fallback Data in case the backend is loading/offline to guarantee WOW demo experience
-const MOCK_PROJECTS = [
-  { id: 1, name: "E-Commerce Microservice Hub", description: "Production retail server containing web manifests, dockerfiles, and python worker scripts.", created_at: "2026-08-17T09:00:00Z", latest_scan_status: "COMPLETED", latest_scan_id: 1, vulnerability_count: 5, risk_score: 95, risk_level: "CRITICAL", quality_score: 82 },
-  { id: 2, name: "AI Analytics Pipeline", description: "Machine learning orchestrator utilizing pandas, numpy, and flask worker nodes.", created_at: "2026-08-17T08:30:00Z", latest_scan_status: "COMPLETED", latest_scan_id: 2, vulnerability_count: 2, risk_score: 65, risk_level: "HIGH", quality_score: 94 },
-  { id: 3, name: "Secure Authentication Gateway", description: "Identity provider service with strict CORS, JWT, and cryptographically verified packages.", created_at: "2026-08-17T08:15:00Z", latest_scan_status: "COMPLETED", latest_scan_id: 3, vulnerability_count: 0, risk_score: 12, risk_level: "LOW", quality_score: 98 }
-];
-
-const MOCK_COMPONENTS_1 = [
-  { id: 1, name: "lodash", version: "4.17.11", ecosystem: "npm", purl: "pkg:npm/lodash@4.17.11", license: "MIT", depth: 0, direct: true, source_file: "package.json", confidence: 0.90, risk_score: 75, risk_level: "HIGH", explanation: "Contains prototype pollution vulnerability (CVE-2019-10744, CVE-2020-8203) with high execution priority.", anomaly_score: 15, vulnerabilities: [{ cve_id: "CVE-2019-10744", cvss_score: 9.8, severity: "CRITICAL", description: "Prototype pollution in defaultsDeep, merge, and mergeWith." }, { cve_id: "CVE-2020-8203", cvss_score: 7.4, severity: "HIGH", description: "Prototype pollution in lodash when parsing object keys." }] },
-  { id: 2, name: "follow-redirects", version: "1.15.2", ecosystem: "npm", purl: "pkg:npm/follow-redirects@1.15.2", license: "MIT", depth: 1, direct: false, source_file: "package-lock.json", confidence: 0.99, risk_score: 65, risk_level: "HIGH", explanation: "Transitive vulnerability (CVE-2023-26159) with redirect credentials leakage.", anomaly_score: 12, vulnerabilities: [{ cve_id: "CVE-2023-26159", cvss_score: 7.5, severity: "HIGH", description: "Redirection leak vulnerability when sending credentials." }] },
-  { id: 3, name: "org.apache.logging.log4j:log4j-core", version: "2.14.0", ecosystem: "maven", purl: "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.0", license: "Apache-2.0", depth: 0, direct: true, source_file: "pom.xml", confidence: 0.90, risk_score: 95, risk_level: "CRITICAL", explanation: "Critical JNDI RCE disclosure (CVE-2021-44228) with maximum blast radius impact.", anomaly_score: 8, vulnerabilities: [{ cve_id: "CVE-2021-44228", cvss_score: 10.0, severity: "CRITICAL", description: "Apache Log4j2 JNDI features do not protect against attacker controlled LDAP endpoints." }] },
-  { id: 4, name: "sih-malicious-package", version: "1.0.0", ecosystem: "npm", purl: "pkg:npm/sih-malicious-package@1.0.0", license: "Unknown", depth: 0, direct: true, source_file: "package.json", confidence: 0.90, risk_score: 88, risk_level: "CRITICAL", explanation: "AI Anomaly engine flagged package due to installation script combined with 85% obfuscated lines and 7 external socket connections.", anomaly_score: 85, vulnerabilities: [] },
-  { id: 5, name: "express", version: "4.17.1", ecosystem: "npm", purl: "pkg:npm/express@4.17.1", license: "MIT", depth: 0, direct: true, source_file: "package.json", confidence: 0.90, risk_score: 10, risk_level: "LOW", explanation: "Passed automated security compliance checks.", anomaly_score: 4, vulnerabilities: [] }
-];
-
-const MOCK_TICKETS = [
-  { ticket_id: "SEC-B29E3C", component_name: "org.apache.logging.log4j:log4j-core", component_version: "2.14.0", severity: "CRITICAL", risk_score: 95, description: "Automated policy violation ticket: Critical JNDI RCE disclosure (CVE-2021-44228).", recommendation: "Upgrade log4j-core to version 2.15.0 or higher.", status: "OPEN", assignee: "Unassigned" },
-  { ticket_id: "SEC-634A1B", component_name: "lodash", component_version: "4.17.11", severity: "HIGH", risk_score: 75, description: "Automated policy violation ticket: Prototype pollution vulnerability (CVE-2019-10744).", recommendation: "Upgrade lodash to version 4.17.21.", status: "IN_PROGRESS", assignee: "Alex Rivera" }
-];
-
-const MOCK_AUDIT = [
-  { timestamp: "2026-08-17T09:12:00Z", username: "admin", action: "scan_completed", details: "Completed security scan for project 'E-Commerce Microservice Hub' (Quality: 82, Gate: BLOCK)", ip_address: "127.0.0.1" },
-  { timestamp: "2026-08-17T09:05:00Z", username: "admin", action: "update_policy", details: "Updated policy 1 ('Block Critical CVSS')", ip_address: "127.0.0.1" },
-  { timestamp: "2026-08-17T09:01:00Z", username: "admin", action: "scan_triggered", details: "Triggered scan 1 via file upload for project 'E-Commerce Microservice Hub'", ip_address: "127.0.0.1" }
-];
-
-const MOCK_POLICIES = [
-  { id: 1, name: "Block Critical CVSS", rule_type: "CVSS_THRESHOLD", rule_condition: ">= 9.0", action: "BLOCK", is_active: true },
-  { id: 2, name: "Review High CVSS", rule_type: "CVSS_THRESHOLD", rule_condition: ">= 7.0", action: "REVIEW", is_active: true },
-  { id: 3, name: "Review AI Anomalies", rule_type: "AI_ANOMALY", rule_condition: ">= 80", action: "REVIEW", is_active: true },
-  { id: 4, name: "Block Copyleft Licenses", rule_type: "FORBIDDEN_LICENSE", rule_condition: "FORBIDDEN", action: "BLOCK", is_active: true }
-];
+// Features
+import DashboardPage from './features/dashboard/DashboardPage';
+import ProjectsPage from './features/projects/ProjectsPage';
+import ProjectDetail from './features/projects/ProjectDetail';
+import TicketsPage from './features/tickets/TicketsPage';
+import PoliciesPage from './features/policies/PoliciesPage';
+import AuditPage from './features/audit/AuditPage';
+import VulnerabilitiesPage from './features/vulnerabilities/VulnerabilitiesPage';
 
 const getRiskBadgeClass = (riskLevel) => {
   if (riskLevel === 'CRITICAL') return 'badge-critical';
@@ -410,6 +394,22 @@ function AuditLogsTab({ auditLogs }) {
 }
 
 export default function App() {
+<<<<<<< HEAD
+  // Global Navigation State
+  const [activeTab, setActiveTab] = useLocalStorage('active_tab', 'dashboard');
+  const [selectedProjectId, setSelectedProjectId] = useLocalStorage('selected_project_id', null);
+
+  // Global Platform Data Hook (replaces all the fetch useEffects)
+  const {
+    isLoading,
+    isOfflineMode,
+    projects, setProjects,
+    tickets, setTickets,
+    auditLogs, setAuditLogs,
+    policies, setPolicies,
+    loadPlatformData,
+  } = usePlatformData();
+=======
   const [token, setToken] = useState(localStorage.getItem("sbomguard_token") || "");
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState("login");
@@ -637,8 +637,37 @@ export default function App() {
       setPolicies(MOCK_POLICIES);
     }
   };
+>>>>>>> aa70ce9d899ddd65ff93be17b470b72d189abe92
 
+  // Load platform data on first mount
   useEffect(() => {
+<<<<<<< HEAD
+    loadPlatformData();
+  }, [loadPlatformData]);
+
+  // Handlers that update global platform state
+  const handleCreatePolicy = (policy) => {
+    // Optimistic mock update for demo
+    const p = { id: Date.now(), ...policy, is_active: true };
+    setPolicies(prev => [...prev, p]);
+    setAuditLogs(prev => [
+      { timestamp: new Date().toISOString(), username: "admin", action: "create_policy", details: `Created policy '${policy.name}'`, ip_address: "127.0.0.1" },
+      ...prev
+    ]);
+  };
+
+  const handleTogglePolicy = (pId, currentStatus) => {
+    setPolicies(prev => prev.map(p => p.id === pId ? { ...p, is_active: !currentStatus } : p));
+  };
+
+  const handleUpdateTicketStatus = (ticketId, currentStatus) => {
+    const nextStatus = currentStatus === "OPEN" ? "IN_PROGRESS" : "RESOLVED";
+    setTickets(prev => prev.map(t => t.ticket_id === ticketId ? { ...t, status: nextStatus } : t));
+    setAuditLogs(prev => [
+      { timestamp: new Date().toISOString(), username: "admin", action: "update_ticket", details: `Updated ticket ${ticketId} status to ${nextStatus}`, ip_address: "127.0.0.1" },
+      ...prev
+    ]);
+=======
     if (selectedProjectId) {
       fetchProjectDetails(selectedProjectId);
     }
@@ -998,36 +1027,18 @@ export default function App() {
         console.error("Failed to update ticket", e);
       }
     }
+>>>>>>> aa70ce9d899ddd65ff93be17b470b72d189abe92
   };
 
-  // Compute stats for Dashboard view
-  const getDashboardStats = () => {
-    const totalProjects = projects.length;
-    let totalDeps = 0;
-    let totalCritical = 0;
-    let totalHigh = 0;
-    let totalMedium = 0;
-    let totalLow = 0;
-    let totalQuality = 0;
-    
-    if (isOfflineMode) {
-      totalDeps = 10;
-      totalCritical = 2;
-      totalHigh = 3;
-      totalMedium = 1;
-      totalLow = 4;
-      totalQuality = 89;
-    } else {
-      // Can iterate over projects to sum details
-      totalQuality = projects.length ? Math.round(projects.reduce((acc, p) => acc + p.quality_score, 0) / projects.length) : 100;
-      // In server mode, stats accumulate dynamically
-      totalCritical = tickets.filter(t => t.severity === "CRITICAL" && t.status !== "RESOLVED").length;
-      totalHigh = tickets.filter(t => t.severity === "HIGH" && t.status !== "RESOLVED").length;
-    }
-    
-    return { totalProjects, totalDeps, totalCritical, totalHigh, totalMedium, totalLow, avgQuality: totalQuality };
+  const handleCreateProject = (name) => {
+    setProjects(prev => [
+      ...prev,
+      { id: Date.now(), name, description: "Custom developer codebase container.", created_at: new Date().toISOString(), latest_scan_status: "NEVER_SCANNED", vulnerability_count: 0, risk_score: 0, risk_level: "LOW", quality_score: 100 }
+    ]);
   };
 
+<<<<<<< HEAD
+=======
   const stats = getDashboardStats();
 
   if (!token && !isOfflineMode) {
@@ -1060,21 +1071,23 @@ export default function App() {
     );
   }
 
+>>>>>>> aa70ce9d899ddd65ff93be17b470b72d189abe92
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
-      
-      {/* Sidebar Navigation */}
-      <aside className="glass-panel" style={{ width: '260px', padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: '32px', borderRight: '1px solid var(--border-color)', borderRadius: '0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingLeft: '8px' }}>
-          <div style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', padding: '8px', borderRadius: '10px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-            <Shield size={24} color="white" />
-          </div>
-          <div>
-            <h2 style={{ fontSize: '1.2rem', fontWeight: 800, background: 'linear-gradient(to right, #ffffff, #9ca3af)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>SBOMGuard AI</h2>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.05em' }}>COMPLIANCE SYSTEM</span>
-          </div>
-        </div>
+      <Sidebar 
+        activeTab={activeTab} 
+        onTabChange={(tab) => {
+          setActiveTab(tab);
+          if (tab === 'dashboard') setSelectedProjectId(null);
+        }}
+        isOfflineMode={isOfflineMode}
+        onSync={loadPlatformData}
+      />
 
+<<<<<<< HEAD
+      <main style={{ flex: 1, padding: '40px', overflowY: 'auto', maxHeight: '100vh', display: 'flex', flexDirection: 'column', gap: '32px' }}>
+        <PageHeader />
+=======
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <button 
             type="button"
@@ -1173,9 +1186,41 @@ export default function App() {
             </button>
           </div>
         </header>
+>>>>>>> aa70ce9d899ddd65ff93be17b470b72d189abe92
 
-        {/* TAB 1: DASHBOARD */}
         {activeTab === 'dashboard' && (
+<<<<<<< HEAD
+          <DashboardPage 
+            projects={projects} 
+            tickets={tickets} 
+            isLoading={isLoading} 
+            isOfflineMode={isOfflineMode}
+            onNavigate={setActiveTab}
+            onSelectProject={setSelectedProjectId}
+          />
+        )}
+
+        {activeTab === 'projects' && !selectedProjectId && (
+          <ProjectsPage 
+            projects={projects} 
+            isLoading={isLoading}
+            onSelectProject={setSelectedProjectId}
+            onCreateProject={handleCreateProject}
+          />
+        )}
+
+        {activeTab === 'projects' && selectedProjectId && (
+          <ProjectDetail 
+            projectId={selectedProjectId}
+            isOfflineMode={isOfflineMode}
+            onBack={() => setSelectedProjectId(null)}
+            onScanComplete={loadPlatformData} // Refresh global stats after scan
+          />
+        )}
+
+        {activeTab === 'vulnerabilities' && (
+          <VulnerabilitiesPage isOfflineMode={isOfflineMode} />
+=======
           <DashboardTab
             stats={stats}
             projects={projects}
@@ -1816,10 +1861,17 @@ Remediation Recommendations:
             )}
 
           </div>
+>>>>>>> aa70ce9d899ddd65ff93be17b470b72d189abe92
         )}
 
-        {/* TAB 3: REMEDIATION / TICKETS */}
         {activeTab === 'tickets' && (
+<<<<<<< HEAD
+          <TicketsPage 
+            tickets={tickets} 
+            isLoading={isLoading} 
+            onUpdateTicketStatus={handleUpdateTicketStatus}
+          />
+=======
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <h3 style={{ fontSize: '1.4rem' }}>Security Remediation Center</h3>
             
@@ -1870,10 +1922,17 @@ Remediation Recommendations:
               </table>
             </div>
           </div>
+>>>>>>> aa70ce9d899ddd65ff93be17b470b72d189abe92
         )}
 
-        {/* TAB 4: POLICY STUDIO */}
         {activeTab === 'policies' && (
+<<<<<<< HEAD
+          <PoliciesPage 
+            policies={policies}
+            onTogglePolicy={handleTogglePolicy}
+            onCreatePolicy={handleCreatePolicy}
+          />
+=======
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <h3 style={{ fontSize: '1.4rem' }}>Compliance Policy Studio (Policy-as-Code)</h3>
             
@@ -1969,15 +2028,20 @@ Remediation Recommendations:
 
             </div>
           </div>
+>>>>>>> aa70ce9d899ddd65ff93be17b470b72d189abe92
         )}
 
-        {/* TAB 5: AUDIT LOGS */}
         {activeTab === 'audit' && (
+<<<<<<< HEAD
+          <AuditPage 
+            auditLogs={auditLogs}
+            isLoading={isLoading}
+=======
           <AuditLogsTab
             auditLogs={auditLogs}
+>>>>>>> aa70ce9d899ddd65ff93be17b470b72d189abe92
           />
         )}
-
       </main>
     </div>
   );
