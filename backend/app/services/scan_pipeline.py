@@ -22,7 +22,7 @@ from backend.app.engines import (
     compute_cross_project_intelligence, evaluate_contextual_security,
     query_osv_vulnerabilities, query_osv_with_offline_fallback,
     build_dependency_graph, calculate_blast_radius, classify_license,
-    analyze_dependency,
+    run_anomaly_detection, classify_malicious_dependency,
     prioritize_risk, analyze_supply_chain_behavior,
     generate_security_explanation, get_remediation_recommendation,
     evaluate_policy, run_cicd_gate, format_developer_feedback
@@ -91,17 +91,17 @@ def _profile_single_component(comp_data, scan, existing_vulns, db):
     )
     comp_model.evidence.append(evidence_rec)
     
-    # Run Prototype Anomaly Detection (Engine 35)
-    anomaly_res = analyze_dependency(comp_data)
+    # Run ML Anomaly Detection (Engine 35)
+    anomaly_res = run_anomaly_detection(comp_data)
     comp_data["anomaly_score"] = anomaly_res["anomaly_score"]
     
     # Save ML predictions into MLPrediction table
     ml_pred_anomaly = MLPrediction(
         component_purl=purl,
-        prediction_type="anomaly_prototype",
-        features_json=json.dumps(anomaly_res.get("signals", [])),
+        prediction_type="anomaly",
+        features_json=json.dumps(anomaly_res.get("indicators", [])),
         prediction_output_json=json.dumps(anomaly_res),
-        confidence_score=1.0 # Deterministic prototype
+        confidence_score=anomaly_res["anomaly_probability"]
     )
     scan.ml_predictions.append(ml_pred_anomaly)
     
@@ -109,11 +109,22 @@ def _profile_single_component(comp_data, scan, existing_vulns, db):
     anomaly_rec = Anomaly(
         component_purl=purl,
         anomaly_score=anomaly_res["anomaly_score"],
-        anomaly_probability=1.0,
+        anomaly_probability=anomaly_res["anomaly_probability"],
         classification=anomaly_res["classification"],
-        indicators_json=json.dumps(anomaly_res["signals"])
+        indicators_json=json.dumps(anomaly_res["indicators"])
     )
     scan.anomalies.append(anomaly_rec)
+    
+    # Run ML Malicious Classification (Engine 36 / 22)
+    malicious_res = classify_malicious_dependency(comp_data)
+    ml_pred_malicious = MLPrediction(
+        component_purl=purl,
+        prediction_type="malicious_classifier",
+        features_json=json.dumps(malicious_res.get("contributing_features", [])),
+        prediction_output_json=json.dumps(malicious_res),
+        confidence_score=malicious_res["probability"]
+    )
+    scan.ml_predictions.append(ml_pred_malicious)
     
     # Run Dependency Confusion checks (Engine 23)
     _ = detect_dependency_confusion(comp_data)
@@ -472,17 +483,17 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
             )
             comp_model.evidence.append(evidence_rec)
             
-            # Run Prototype Anomaly Detection (Engine 35)
-            anomaly_res = analyze_dependency(comp_data)
+            # Run ML Anomaly Detection (Engine 35)
+            anomaly_res = run_anomaly_detection(comp_data)
             comp_data["anomaly_score"] = anomaly_res["anomaly_score"]
             
             # Save ML predictions into MLPrediction table
             ml_pred_anomaly = MLPrediction(
                 component_purl=purl,
-                prediction_type="anomaly_prototype",
-                features_json=json.dumps(anomaly_res.get("signals", [])),
+                prediction_type="anomaly",
+                features_json=json.dumps(anomaly_res.get("indicators", [])),
                 prediction_output_json=json.dumps(anomaly_res),
-                confidence_score=1.0
+                confidence_score=anomaly_res["anomaly_probability"]
             )
             scan.ml_predictions.append(ml_pred_anomaly)
             
@@ -490,11 +501,22 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
             anomaly_rec = Anomaly(
                 component_purl=purl,
                 anomaly_score=anomaly_res["anomaly_score"],
-                anomaly_probability=1.0,
+                anomaly_probability=anomaly_res["anomaly_probability"],
                 classification=anomaly_res["classification"],
-                indicators_json=json.dumps(anomaly_res["signals"])
+                indicators_json=json.dumps(anomaly_res["indicators"])
             )
             scan.anomalies.append(anomaly_rec)
+            
+            # Run ML Malicious Classification (Engine 36 / 22)
+            malicious_res = classify_malicious_dependency(comp_data)
+            ml_pred_malicious = MLPrediction(
+                component_purl=purl,
+                prediction_type="malicious_classifier",
+                features_json=json.dumps(malicious_res.get("contributing_features", [])),
+                prediction_output_json=json.dumps(malicious_res),
+                confidence_score=malicious_res["probability"]
+            )
+            scan.ml_predictions.append(ml_pred_malicious)
             
             # Run Dependency Confusion checks (Engine 23)
             confusion_res = detect_dependency_confusion(comp_data)
@@ -508,7 +530,7 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
             # Run Reputation analysis (Engine 27)
             reputation_res = analyze_package_reputation(comp_data)
             
-            # ── OSV Vulnerability Intelligence (with offline fallback) ──
+            # ── OSV Vulnerability Intelligence (with offline fallback) ──────────
             from backend.app.engines.security_engine import OFFLINE_VULN_DB
             vuln_matches, vuln_source = query_osv_with_offline_fallback(
                 purl, name, version, eco, OFFLINE_VULN_DB
@@ -556,7 +578,7 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
                     "description": vuln_db.summary
                 }
                 comp_vulns.append(c_vuln)
-            
+                
             purl_to_vulns[purl] = comp_vulns
             purl_to_comp_obj[purl] = comp_model
             processed_components.append(comp_model)
@@ -564,17 +586,21 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
             graph_node_data = dict(comp_data)
             graph_node_data["vulnerabilities"] = comp_vulns
             components_for_graph.append(graph_node_data)
-        
-        update_progress("GRAPH_ANALYSIS", f"Component profiling complete. {len(processed_components)} components analysed.", 45)
+            
+        _log_msg(f"Component security profiling complete. Map contains {len(processed_components)} entries.", logs)
         
         # 3. BUILD ATTACK GRAPH & BLAST RADIUS (Engines 30, 31)
         update_progress("GRAPH_ANALYSIS", "Building Dependency Attack Graph...", 50)
+        # Parse direct relationships if lockfile data is available
         relations = {}
+        # Connect transitive dependencies to their immediate parent dependencies
+        # Let's populate the relationships based on npm requires if they exist
         for comp in discovery_results["components"]:
             purl = comp["purl"]
             if comp.get("dependencies"):
                 children_purls = []
                 for child_name in comp["dependencies"]:
+                    # Find matching child component
                     child_match = next((c for c in discovery_results["components"] if c["name"] == child_name and c["ecosystem"] == comp["ecosystem"]), None)
                     if child_match:
                         children_purls.append(child_match["purl"])
@@ -620,8 +646,7 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
                 blast_radius_json=json.dumps(blast_radius_res),
                 production_exposure=blast_radius_res["production_exposure"],
                 risk_factors=json.dumps(risk_res.get("factors", [])),
-                missing_signals=json.dumps(risk_res.get("missing_signals", [])),
-                risk_calculation_version=risk_res.get("calculation_version", "prototype-v1")
+                risk_calculation_version="1.0"
             )
             scan.risk_assessments.append(risk_model)
             
@@ -708,11 +733,6 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
             file_hash=file_hash,
             signature=signature_str,
             verification_status=verification_status
-=======
-        # 3. BUILD ATTACK GRAPH & BLAST RADIUS
-        graph_data, pending_dependencies = _run_graph_and_risk_phase(
-            project_id, scan, project, components_for_graph, purl_to_vulns, discovery_results, policy_rules, logs
->>>>>>> aa70ce9d899ddd65ff93be17b470b72d189abe92
         )
         
         # 4. SBOM COMPILING, SIGNING & VALIDATION
@@ -734,10 +754,7 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
         
     except Exception as e:
         err_msg = traceback.format_exc()
-        try:
-            update_progress("FAILED", f"Pipeline error: {str(e)}", scan.overall_progress, "FAILED")
-        except Exception:
-            pass
+        update_progress("FAILED", f"Pipeline error: {str(e)}", scan.overall_progress, "FAILED")
         scan.status = "FAILED"
         scan.completed_at = datetime.utcnow()
         scan.log = "\n".join(logs) + f"\n{err_msg}"

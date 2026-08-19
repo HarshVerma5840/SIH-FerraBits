@@ -1,12 +1,42 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Check } from 'lucide-react';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { SkeletonTableRows } from '../../components/Loader';
+import RemediationWorkspace from './RemediationWorkspace';
 
 export default function TicketsPage({ tickets, isLoading, onUpdateTicketStatus }) {
   const [filter, setFilter] = useLocalStorage('tickets_filter', 'ALL');
+  const [activeWorkspace, setActiveWorkspace] = useState(null);
 
   const filteredTickets = tickets.filter(t => filter === 'ALL' || t.status === filter);
+
+  // Handle action button click
+  const handleAction = (ticket) => {
+    if (ticket.status === 'OPEN') {
+      // Start Work: OPEN → IN_PROGRESS
+      onUpdateTicketStatus(ticket.ticket_id, ticket.status);
+    } else if (ticket.status === 'IN_PROGRESS') {
+      // Resolve: open the Remediation Workspace
+      setActiveWorkspace(ticket);
+    }
+  };
+
+  // Handle resolve from workspace
+  const handleResolveFromWorkspace = (ticketId) => {
+    onUpdateTicketStatus(ticketId, 'IN_PROGRESS'); // IN_PROGRESS → RESOLVED
+    setActiveWorkspace(null);
+  };
+
+  // If workspace is active, render it instead of the table
+  if (activeWorkspace) {
+    return (
+      <RemediationWorkspace
+        ticket={activeWorkspace}
+        onBack={() => setActiveWorkspace(null)}
+        onResolve={handleResolveFromWorkspace}
+      />
+    );
+  }
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -68,7 +98,7 @@ export default function TicketsPage({ tickets, isLoading, onUpdateTicketStatus }
                   </td>
                   <td style={{ padding: '16px' }}>
                     {t.status !== 'RESOLVED' ? (
-                      <button className="btn-secondary" onClick={() => onUpdateTicketStatus(t.ticket_id, t.status)} style={{ padding: '6px 12px', fontSize: '0.75rem' }}>
+                      <button className="btn-secondary" onClick={() => handleAction(t)} style={{ padding: '6px 12px', fontSize: '0.75rem' }}>
                         {t.status === 'OPEN' ? 'Start Work' : 'Resolve Ticket'}
                       </button>
                     ) : (
