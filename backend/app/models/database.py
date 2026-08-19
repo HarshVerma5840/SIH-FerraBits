@@ -206,6 +206,7 @@ class RiskAssessment(Base):
     blast_radius_json = Column(Text, nullable=True) # downstream impact paths
     production_exposure = Column(Boolean, default=False)
     risk_factors = Column(Text, nullable=True) # JSON array of evidence-backed risk reasons
+    missing_signals = Column(Text, nullable=True) # JSON list of unavailable/missing signals
     risk_calculation_version = Column(String(50), default="1.0")
     
     scan = relationship("Scan", back_populates="risk_assessments")

@@ -400,7 +400,6 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
     db.commit()
     
     logs = []
-<<<<<<< HEAD
     def log(msg):
         print(msg)
         logs.append(f"[{datetime.utcnow().isoformat()}] {msg}")
@@ -419,13 +418,6 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
         # 1. RUN DISCOVERY PIPELINE (Engines 1-9)
         update_progress("DISCOVERY", "Running Repository Discovery, Language & Ecosystem detection...", 10)
         discovery_results = run_repository_discovery(target_dir)
-=======
-    try:
-        _log_msg(f"Starting scan {scan_id} for project '{project.name}' in directory: {target_dir}", logs)
-        
-        # 1. RUN DISCOVERY PHASE
-        discovery_results = _run_discovery_phase(target_dir, logs)
->>>>>>> aa70ce9d899ddd65ff93be17b470b72d189abe92
         
         db_policies = db.query(Policy).filter(Policy.is_active == True).all()
         policy_rules = [
@@ -440,7 +432,6 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
         purl_to_comp_obj = {}
         purl_to_vulns = {}
         
-<<<<<<< HEAD
         # 2. RUN SECURITY & ML ANALYSIS PER COMPONENT (Engines 10, 15, 16, 22-28, 35-36)
         update_progress("VERSION_RESOLUTION", "Starting individual component inspection and version resolution...", 30)
         for comp_data in discovery_results["components"]:
@@ -539,7 +530,7 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
             # Run Reputation analysis (Engine 27)
             reputation_res = analyze_package_reputation(comp_data)
             
-            # ── OSV Vulnerability Intelligence (with offline fallback) ──────────
+            # ── OSV Vulnerability Intelligence (with offline fallback) ──
             from backend.app.engines.security_engine import OFFLINE_VULN_DB
             vuln_matches, vuln_source = query_osv_with_offline_fallback(
                 purl, name, version, eco, OFFLINE_VULN_DB
@@ -587,12 +578,7 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
                     "description": vuln_db.summary
                 }
                 comp_vulns.append(c_vuln)
-                
-=======
-        _log_msg("Starting individual component inspection, ML predictions and vulnerability matching...", logs)
-        for comp_data in discovery_results["components"]:
-            comp_model, comp_vulns, purl = _profile_single_component(comp_data, scan, existing_vulns, db)
->>>>>>> aa70ce9d899ddd65ff93be17b470b72d189abe92
+            
             purl_to_vulns[purl] = comp_vulns
             purl_to_comp_obj[purl] = comp_model
             processed_components.append(comp_model)
@@ -600,22 +586,17 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
             graph_node_data = dict(comp_data)
             graph_node_data["vulnerabilities"] = comp_vulns
             components_for_graph.append(graph_node_data)
-            
-        _log_msg(f"Component security profiling complete. Map contains {len(processed_components)} entries.", logs)
         
-<<<<<<< HEAD
+        update_progress("GRAPH_ANALYSIS", f"Component profiling complete. {len(processed_components)} components analysed.", 45)
+        
         # 3. BUILD ATTACK GRAPH & BLAST RADIUS (Engines 30, 31)
         update_progress("GRAPH_ANALYSIS", "Building Dependency Attack Graph...", 50)
-        # Parse direct relationships if lockfile data is available
         relations = {}
-        # Connect transitive dependencies to their immediate parent dependencies
-        # Let's populate the relationships based on npm requires if they exist
         for comp in discovery_results["components"]:
             purl = comp["purl"]
             if comp.get("dependencies"):
                 children_purls = []
                 for child_name in comp["dependencies"]:
-                    # Find matching child component
                     child_match = next((c for c in discovery_results["components"] if c["name"] == child_name and c["ecosystem"] == comp["ecosystem"]), None)
                     if child_match:
                         children_purls.append(child_match["purl"])
@@ -661,7 +642,8 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
                 blast_radius_json=json.dumps(blast_radius_res),
                 production_exposure=blast_radius_res["production_exposure"],
                 risk_factors=json.dumps(risk_res.get("factors", [])),
-                risk_calculation_version="1.0"
+                missing_signals=json.dumps(risk_res.get("missing_signals", [])),
+                risk_calculation_version=risk_res.get("calculation_version", "prototype-v1")
             )
             scan.risk_assessments.append(risk_model)
             
@@ -764,7 +746,6 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
         _run_post_scan_phase(
             project_id, scan, project, sbom_model, cyclonedx_sbom, quality_score_res, components_for_graph, logs, db
         )
-<<<<<<< HEAD
         db.add(audit_rec)
         
         update_progress("FINALIZING", f"Scan complete. Gate decision: {gate_res['status']}.", 100, "COMPLETED")
@@ -775,19 +756,13 @@ def run_scan_pipeline(project_id: int, scan_id: int, target_dir: str, db: Sessio
         
     except Exception as e:
         err_msg = traceback.format_exc()
-        update_progress("FAILED", f"Pipeline error: {str(e)}", scan.overall_progress, "FAILED")
+        try:
+            update_progress("FAILED", f"Pipeline error: {str(e)}", scan.overall_progress, "FAILED")
+        except Exception:
+            pass
         scan.status = "FAILED"
         scan.completed_at = datetime.utcnow()
         scan.log = "\n".join(logs) + f"\n{err_msg}"
-=======
-        
-    except Exception as e:
-        err_msg = traceback.format_exc()
-        _log_msg(f"Pipeline error: {str(e)}\n{err_msg}", logs)
-        scan.status = "FAILED"
-        scan.completed_at = datetime.now(timezone.utc)
-        scan.log = "\n".join(logs)
->>>>>>> aa70ce9d899ddd65ff93be17b470b72d189abe92
         db.commit()
         
         audit_rec = AuditLog(

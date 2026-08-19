@@ -41,11 +41,20 @@ def _serialize_finding(f: SecurityFinding, db: Session) -> dict:
     ).first()
 
     risk_factors: list = []
+    risk_missing_signals: list = []
+    risk_calc_version: str = "prototype-v1"
     if risk and risk.risk_factors:
         try:
             risk_factors = json.loads(risk.risk_factors)
         except Exception:
             pass
+    if risk and risk.missing_signals:
+        try:
+            risk_missing_signals = json.loads(risk.missing_signals)
+        except Exception:
+            pass
+    if risk and risk.risk_calculation_version:
+        risk_calc_version = risk.risk_calculation_version
 
     # Parse vuln fields safely
     aliases: list = []
@@ -102,13 +111,14 @@ def _serialize_finding(f: SecurityFinding, db: Session) -> dict:
             "score": risk.risk_score if risk else 0,
             "severity": risk.risk_level if risk else "UNKNOWN",
             "factors": risk_factors,
+            "missing_signals": risk_missing_signals,
+            "calculation_version": risk_calc_version,
         },
         "status": f.status,
     }
 
 
 @router.get("")
-<<<<<<< HEAD
 def list_vulnerabilities(
     scan_id: int | None = None,
     project_id: int | None = None,
@@ -143,26 +153,6 @@ def get_finding(
         raise HTTPException(status_code=404, detail=f"Finding '{finding_id}' not found.")
     return _serialize_finding(f, db)
 
-=======
-def list_vulnerabilities(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    _ = current_user
-    vulns = db.query(Vulnerability).all()
-    out = []
-    for v in vulns:
-        # Count affected packages
-        # Using many-to-many relationship
-        affected_comps = len(v.components)
-        out.append({
-            "cve_id": v.cve_id,
-            "cvss_score": v.cvss_score,
-            "severity": v.severity,
-            "description": v.description,
-            "affected_versions": v.affected_versions,
-            "fixed_versions": v.fixed_versions,
-            "affected_packages_count": affected_comps
-        })
-    return out
->>>>>>> aa70ce9d899ddd65ff93be17b470b72d189abe92
 
 @router.put("/vex")
 def update_vex_status(

@@ -3,6 +3,7 @@ import { Bug, ExternalLink, ChevronDown, ChevronRight, Shield, AlertTriangle, In
 import { API_BASE } from '../../constants/mock';
 import { Spinner } from '../../components/Loader';
 import AIExplanationCard from './AIExplanationCard';
+import WhyRiskyCard from './WhyRiskyCard';
 
 // ─── Severity badge color mapping ────────────────────────────────────────────
 const SEV_COLORS = {
@@ -250,35 +251,8 @@ function FindingRow({ finding }) {
                   </div>
                 </div>
 
-                {/* Risk factors */}
-                {(risk?.factors || []).length > 0 && (
-                  <div>
-                    <h5 style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '8px', color: 'var(--text-muted)', letterSpacing: '0.05em' }}>
-                      WHY IS THIS RISKY?
-                    </h5>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {risk.factors.map((factor, idx) => (
-                        <div key={idx} style={{
-                          padding: '8px 10px', borderRadius: '6px',
-                          background: 'rgba(0,0,0,0.2)',
-                          borderLeft: `3px solid ${
-                            factor.severity === 'CRITICAL' ? '#ef4444'
-                              : factor.severity === 'HIGH' ? '#f97316'
-                              : '#eab308'
-                          }`
-                        }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
-                            <span style={{ fontWeight: 600, fontSize: '0.78rem' }}>{factor.title}</span>
-                            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{factor.type}</span>
-                          </div>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--primary)', fontFamily: 'var(--font-mono)' }}>
-                            {factor.evidence}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {/* Phase 3: Explainable Risk Analysis */}
+                <WhyRiskyCard risk={risk} />
               </div>
             </div>
           </td>

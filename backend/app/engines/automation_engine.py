@@ -1,9 +1,19 @@
-<<<<<<< HEAD
 """
 Automation Engine — CI/CD Workflow Execution
 Responsibility: Execute workflow actions based on completed policy decisions.
 Formats the final gate result and developer-facing feedback report.
-=======
+
+Boundary rules:
+- Does NOT calculate vulnerability severity.
+- Does NOT train or run ML models.
+- Does NOT perform CVE matching.
+- Consumes policy decisions from policy_engine; does NOT produce them.
+
+Note: evaluate_policy() helper is included here for backward-compatibility with
+pipeline imports. The canonical home is policy_engine.py.
+"""
+
+
 def _evaluate_cvss(vulnerabilities, policy_rules, reasons):
     if not vulnerabilities:
         return "PASS"
@@ -26,6 +36,7 @@ def _evaluate_cvss(vulnerabilities, policy_rules, reasons):
             action = "REVIEW"
     return action
 
+
 def _evaluate_anomaly(component, policy_rules, reasons):
     ai_score = component.get("anomaly_score", 0)
     action = "PASS"
@@ -46,6 +57,7 @@ def _evaluate_anomaly(component, policy_rules, reasons):
             action = "REVIEW"
     return action
 
+
 def _evaluate_license(component, policy_rules, reasons):
     action = "PASS"
     license_class = component.get("license_classification", "PERMISSIVE")
@@ -63,6 +75,7 @@ def _evaluate_license(component, policy_rules, reasons):
             action = "REVIEW"
     return action
 
+
 def _evaluate_version(component, policy_rules, reasons):
     action = "PASS"
     version = component.get("version", "UNKNOWN")
@@ -79,13 +92,25 @@ def _evaluate_version(component, policy_rules, reasons):
             action = "REVIEW"
     return action
 
-def evaluate_policy(component, vulnerabilities, policy_rules):
+
+def evaluate_policy(component, vulnerabilities, risk_score_or_rules=None, policy_rules=None):
     """
-    Engine 48: Policy Evaluation Engine
-    Engine 54: Policy-as-Code Engine
+    Engine 48: Policy Evaluation Engine / Engine 54: Policy-as-Code Engine.
     Evaluates components against stored policies.
+
+    Accepts both the old 3-arg signature (component, vulnerabilities, policy_rules)
+    and the new 4-arg signature (component, vulnerabilities, risk_score, policy_rules).
     """
-    # Default policy rules if none exist in the database
+    # Handle both old and new call signatures
+    if policy_rules is None:
+        # Old 3-arg call: evaluate_policy(comp, vulns, policy_rules)
+        if isinstance(risk_score_or_rules, list):
+            policy_rules = risk_score_or_rules
+        else:
+            policy_rules = []
+    # else: new 4-arg call, policy_rules already set
+
+    # Default policy rules if none provided
     if not policy_rules:
         policy_rules = [
             {"rule_type": "CVSS_THRESHOLD", "condition": ">= 9.0", "action": "BLOCK"},
@@ -94,15 +119,13 @@ def evaluate_policy(component, vulnerabilities, policy_rules):
             {"rule_type": "FORBIDDEN_LICENSE", "condition": "FORBIDDEN", "action": "BLOCK"},
             {"rule_type": "UNKNOWN_VERSION", "condition": "UNKNOWN", "action": "REVIEW"}
         ]
-        
+
     reasons = []
-    
     cvss_action = _evaluate_cvss(vulnerabilities, policy_rules, reasons)
     anomaly_action = _evaluate_anomaly(component, policy_rules, reasons)
     license_action = _evaluate_license(component, policy_rules, reasons)
     version_action = _evaluate_version(component, policy_rules, reasons)
-    
-    # Aggregate action: BLOCK > REVIEW > PASS
+
     actions = [cvss_action, anomaly_action, license_action, version_action]
     if "BLOCK" in actions:
         action = "BLOCK"
@@ -110,21 +133,8 @@ def evaluate_policy(component, vulnerabilities, policy_rules):
         action = "REVIEW"
     else:
         action = "PASS"
-        
-    return {
-        "action": action,
-        "reasons": reasons
-    }
->>>>>>> aa70ce9d899ddd65ff93be17b470b72d189abe92
 
-Boundary rules:
-- Does NOT calculate vulnerability severity.
-- Does NOT train or run ML models.
-- Does NOT perform CVE matching.
-- Consumes policy decisions from policy_engine; does NOT produce them.
-
-Note: evaluate_policy() has been moved to policy_engine.py
-"""
+    return {"action": action, "reasons": reasons}
 
 
 def run_cicd_gate(components_with_evals: list[dict]) -> dict:

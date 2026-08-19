@@ -170,7 +170,6 @@ def parse_package_lock(filepath, relative_path):
             data = json.load(f)
             
         if "packages" in data:
-<<<<<<< HEAD
             for pkg_path, pkg_info in data["packages"].items():
                 if not pkg_path: # Root package
                     continue
@@ -220,11 +219,7 @@ def parse_package_lock(filepath, relative_path):
                     if "dependencies" in info:
                         recurse_v1(info["dependencies"], depth + 1)
             recurse_v1(data["dependencies"])
-=======
-            _parse_lock_packages(data["packages"], relative_path, dependencies)
-        elif "dependencies" in data:
-            _parse_lock_dependencies_v1(data["dependencies"], relative_path, dependencies)
->>>>>>> aa70ce9d899ddd65ff93be17b470b72d189abe92
+
     except Exception as e:
         print(f"Error parsing package-lock.json {filepath}: {str(e)}")
     return dependencies
