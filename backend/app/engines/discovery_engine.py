@@ -3,13 +3,31 @@ import json
 import xml.etree.ElementTree as ET
 import re
 
+# File name constants to avoid duplication
+PKG_JSON = "package.json"
+PKG_LOCK_JSON = "package-lock.json"
+REQ_TXT = "requirements.txt"
+POM_XML = "pom.xml"
+DOCKER_COMPOSE_YML = "docker-compose.yml"
+DOCKERFILE = "Dockerfile"
+
 # Supported manifest patterns
 MANIFEST_PATTERNS = {
-    "javascript": ["package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml"],
-    "python": ["requirements.txt", "Pipfile", "Pipfile.lock", "pyproject.toml", "poetry.lock"],
-    "java": ["pom.xml", "build.gradle", "gradle.lockfile"],
-    "docker": ["Dockerfile", "docker-compose.yml"]
+    "javascript": [PKG_JSON, PKG_LOCK_JSON, "yarn.lock", "pnpm-lock.yaml"],
+    "python": [REQ_TXT, "Pipfile", "Pipfile.lock", "pyproject.toml", "poetry.lock"],
+    "java": [POM_XML, "build.gradle", "gradle.lockfile"],
+    "docker": [DOCKERFILE, DOCKER_COMPOSE_YML]
 }
+
+def _map_file_to_languages(file, ext, extensions, found_languages):
+    if ext in extensions["JavaScript"] or file in extensions["JavaScript"]:
+        found_languages.add("JavaScript")
+    if ext in extensions["Python"]:
+        found_languages.add("Python")
+    if ext in extensions["Java"] or file in extensions["Java"]:
+        found_languages.add("Java")
+    if file == DOCKERFILE or file == DOCKER_COMPOSE_YML:
+        found_languages.add("Docker")
 
 def detect_languages(directory_path):
     """Engine 2: Language Detection Engine"""
@@ -17,20 +35,13 @@ def detect_languages(directory_path):
         "JavaScript": [".js", ".jsx", ".ts", ".tsx"],
         "Python": [".py"],
         "Java": [".java", ".jar", ".class"],
-        "Docker": ["Dockerfile", "docker-compose.yml"]
+        "Docker": [DOCKERFILE, DOCKER_COMPOSE_YML]
     }
     found_languages = set()
     for root, dirs, files in os.walk(directory_path):
         for file in files:
             ext = os.path.splitext(file)[1].lower()
-            if ext in extensions["JavaScript"] or file in extensions["JavaScript"]:
-                found_languages.add("JavaScript")
-            if ext in extensions["Python"]:
-                found_languages.add("Python")
-            if ext in extensions["Java"] or file in extensions["Java"]:
-                found_languages.add("Java")
-            if file == "Dockerfile" or file == "docker-compose.yml":
-                found_languages.add("Docker")
+            _map_file_to_languages(file, ext, extensions, found_languages)
     return list(found_languages)
 
 def detect_ecosystems(manifests):
@@ -38,13 +49,13 @@ def detect_ecosystems(manifests):
     ecosystems = set()
     for manifest in manifests:
         filename = os.path.basename(manifest)
-        if filename in ["package.json", "package-lock.json"]:
+        if filename in [PKG_JSON, PKG_LOCK_JSON]:
             ecosystems.add("npm")
-        elif filename in ["requirements.txt", "poetry.lock", "Pipfile.lock"]:
+        elif filename in [REQ_TXT, "poetry.lock", "Pipfile.lock"]:
             ecosystems.add("pypi")
-        elif filename in ["pom.xml", "build.gradle"]:
+        elif filename in [POM_XML, "build.gradle"]:
             ecosystems.add("maven")
-        elif filename in ["Dockerfile", "docker-compose.yml"]:
+        elif filename in [DOCKERFILE, DOCKER_COMPOSE_YML]:
             ecosystems.add("docker")
     return list(ecosystems)
 
@@ -288,51 +299,61 @@ def parse_dockerfile(filepath, relative_path):
         print(f"Error parsing Dockerfile {filepath}: {str(e)}")
     return dependencies
 
+
+def _resolve_from_lock_only(npm_lock_data, raw_components):
+    for trans in npm_lock_data:
+        trans["direct"] = (trans["depth"] == 1)
+        raw_components.append(trans)
+
+def _resolve_package_and_lock(npm_package_data, npm_lock_data, raw_components):
+    lock_map = {item["name"]: item for item in npm_lock_data}
+    for direct in npm_package_data:
+        name = direct["name"]
+        if name in lock_map:
+            direct["version"] = lock_map[name]["version"]
+            direct["hash"] = lock_map[name].get("hash", "Unknown")
+            direct["license"] = lock_map[name].get("license", direct["license"])
+            lock_map.pop(name)
+        else:
+            direct["version"] = direct.get("version_spec", "UNKNOWN")
+        raw_components.append(direct)
+        
+    for name, trans in lock_map.items():
+        trans["direct"] = False
+        raw_components.append(trans)
+
+def _resolve_package_only(npm_package_data, raw_components):
+    for direct in npm_package_data:
+        direct["version"] = direct.get("version_spec", "UNKNOWN")
+        raw_components.append(direct)
+
 def _parse_manifests(manifests, raw_components, npm_package_data, npm_lock_data):
     for mf in manifests:
         filename = mf["name"]
         fullpath = mf["fullpath"]
         relpath = mf["filepath"]
         
-        if filename == "package.json":
+        if filename == PKG_JSON:
             npm_package_data.extend(parse_package_json(fullpath, relpath))
-        elif filename == "package-lock.json":
+        elif filename == PKG_LOCK_JSON:
             npm_lock_data.extend(parse_package_lock(fullpath, relpath))
-        elif filename == "requirements.txt":
+        elif filename == REQ_TXT:
             raw_components.extend(parse_requirements_txt(fullpath, relpath))
-        elif filename == "pom.xml":
+        elif filename == POM_XML:
             raw_components.extend(parse_pom_xml(fullpath, relpath))
-        elif filename == "Dockerfile":
+        elif filename == DOCKERFILE:
             raw_components.extend(parse_dockerfile(fullpath, relpath))
 
 def _resolve_npm_dependencies(npm_package_data, npm_lock_data, raw_components):
     if not npm_package_data:
         if npm_lock_data:
-            for trans in npm_lock_data:
-                trans["direct"] = (trans["depth"] == 1)
-                raw_components.append(trans)
+            _resolve_from_lock_only(npm_lock_data, raw_components)
         return
 
     if npm_lock_data:
-        lock_map = {item["name"]: item for item in npm_lock_data}
-        for direct in npm_package_data:
-            name = direct["name"]
-            if name in lock_map:
-                direct["version"] = lock_map[name]["version"]
-                direct["hash"] = lock_map[name].get("hash", "Unknown")
-                direct["license"] = lock_map[name].get("license", direct["license"])
-                lock_map.pop(name)
-            else:
-                direct["version"] = direct.get("version_spec", "UNKNOWN")
-            raw_components.append(direct)
-            
-        for name, trans in lock_map.items():
-            trans["direct"] = False
-            raw_components.append(trans)
+        _resolve_package_and_lock(npm_package_data, npm_lock_data, raw_components)
     else:
-        for direct in npm_package_data:
-            direct["version"] = direct.get("version_spec", "UNKNOWN")
-            raw_components.append(direct)
+        _resolve_package_only(npm_package_data, raw_components)
 
 def discover_dependencies(manifests):
     """

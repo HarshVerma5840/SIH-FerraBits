@@ -426,6 +426,7 @@ export default function App() {
   const [tickets, setTickets] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [policies, setPolicies] = useState([]);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
 
   const getAuthHeaders = () => {
     return token ? { "Authorization": `Bearer ${token}` } : {};
@@ -443,7 +444,7 @@ export default function App() {
     const verifyToken = async () => {
       if (token) {
         try {
-          const res = await fetch(`${API_BASE}/auth/me`, {
+          const res = await fetch(`${API_BASE}/api/auth/me`, {
             headers: { "Authorization": `Bearer ${token}` }
           });
           if (res.ok) {
@@ -475,7 +476,7 @@ export default function App() {
     e.preventDefault();
     setAuthError("");
     try {
-      const res = await fetch(`${API_BASE}/auth/register`, {
+      const res = await fetch(`${API_BASE}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -506,7 +507,7 @@ export default function App() {
       formData.append("username", authUsername);
       formData.append("password", authPassword);
 
-      const res = await fetch(`${API_BASE}/auth/login`, {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: formData.toString()
@@ -600,9 +601,6 @@ export default function App() {
   // Visual graph selected node / blast radius
   const [selectedGraphNode, setSelectedGraphNode] = useState(null);
   const [graphBlastRadius, setGraphBlastRadius] = useState(null);
-
-  // Mode state (Server vs Mock Offline)
-  const [isOfflineMode, setIsOfflineMode] = useState(false);
 
   // Fetch base platform records
   const loadPlatformData = async () => {

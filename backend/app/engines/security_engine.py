@@ -260,10 +260,17 @@ def analyze_package_reputation(component):
         score -= 30
         indicators.append("Low public downloads / star rating")
         
+    if score > 80:
+        level = "EXCELLENT"
+    elif score > 50:
+        level = "GOOD"
+    else:
+        level = "POOR"
+
     return {
         "reputation_score": max(score, 0),
         "indicators": indicators,
-        "level": "EXCELLENT" if score > 80 else ("GOOD" if score > 50 else "POOR")
+        "level": level
     }
 
 def verify_cryptographic_integrity(component):
@@ -273,9 +280,7 @@ def verify_cryptographic_integrity(component):
         return "UNKNOWN"
         
     # Check format of sha256 or integrity hash
-    if file_hash.startswith("sha512-") or file_hash.startswith("sha256-"):
-        return "VALID"
-    elif len(file_hash) == 64: # SHA-256 hex
+    if file_hash.startswith(("sha512-", "sha256-")) or len(file_hash) == 64:
         return "VALID"
         
     return "INVALID"

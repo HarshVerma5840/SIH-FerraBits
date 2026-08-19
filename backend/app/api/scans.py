@@ -18,7 +18,7 @@ class LocalScanRequest(BaseModel):
     project_id: int
     directory_path: str
 
-@router.post("/upload")
+@router.post("/upload", responses={404: {"description": "Project not found"}, 400: {"description": "Invalid file format or traversal attempt"}, 500: {"description": "Extraction error"}})
 def upload_and_scan(
     background_tasks: BackgroundTasks,
     project_id: int = Form(...),
@@ -89,7 +89,7 @@ def upload_and_scan(
         "message": "Scan scheduled in background"
     }
 
-@router.post("/local")
+@router.post("/local", responses={404: {"description": "Project or local directory not found"}})
 def scan_local_directory(
     background_tasks: BackgroundTasks,
     data: LocalScanRequest,
@@ -132,7 +132,7 @@ def scan_local_directory(
         "message": f"Scan scheduled for local directory: {data.directory_path}"
     }
 
-@router.get("/{scan_id}/status")
+@router.get("/{scan_id}/status", responses={404: {"description": "Scan not found"}})
 def get_scan_status(scan_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     _ = current_user
     scan = db.query(Scan).get(scan_id)
@@ -145,7 +145,7 @@ def get_scan_status(scan_id: int, db: Session = Depends(get_db), current_user = 
         "completed_at": scan.completed_at
     }
 
-@router.get("/{scan_id}/logs")
+@router.get("/{scan_id}/logs", responses={404: {"description": "Scan not found"}})
 def get_scan_logs(scan_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     _ = current_user
     scan = db.query(Scan).get(scan_id)

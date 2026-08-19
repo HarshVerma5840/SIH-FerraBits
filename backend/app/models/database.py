@@ -22,12 +22,19 @@ engine = create_engine(DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+# Relationship & Foreign Key constants to resolve SonarQube duplicate literal warnings
+CASCADE_DELETE_ORPHAN = "all, delete-orphan"
+PROJECTS_ID_FK = "projects.id"
+SCANS_ID_FK = "scans.id"
+SBOMS_ID_FK = "sboms.id"
+CASCADE_ON_DELETE = "CASCADE"
+
 # Many-to-Many relationship table for Component Vulnerability Map
 component_vulnerabilities = Table(
     "component_vulnerabilities_map",
     Base.metadata,
-    Column("component_id", Integer, ForeignKey("sbom_components.id", ondelete="CASCADE"), primary_key=True),
-    Column("vulnerability_id", Integer, ForeignKey("vulnerabilities.id", ondelete="CASCADE"), primary_key=True),
+    Column("component_id", Integer, ForeignKey("sbom_components.id", ondelete=CASCADE_ON_DELETE), primary_key=True),
+    Column("vulnerability_id", Integer, ForeignKey("vulnerabilities.id", ondelete=CASCADE_ON_DELETE), primary_key=True),
 )
 
 class Role(Base):
@@ -56,17 +63,17 @@ class Project(Base):
     created_at = Column(DateTime, default=get_utc_now)
     updated_at = Column(DateTime, default=get_utc_now, onupdate=get_utc_now)
     
-    repositories = relationship("Repository", back_populates="project", cascade="all, delete-orphan")
-    scans = relationship("Scan", back_populates="project", cascade="all, delete-orphan")
-    sbom_versions = relationship("SBOMVersion", back_populates="project", cascade="all, delete-orphan")
-    sbom_diffs = relationship("SBOMDiff", back_populates="project", cascade="all, delete-orphan")
-    tickets = relationship("Ticket", back_populates="project", cascade="all, delete-orphan")
-    alerts = relationship("Alert", back_populates="project", cascade="all, delete-orphan")
+    repositories = relationship("Repository", back_populates="project", cascade=CASCADE_DELETE_ORPHAN)
+    scans = relationship("Scan", back_populates="project", cascade=CASCADE_DELETE_ORPHAN)
+    sbom_versions = relationship("SBOMVersion", back_populates="project", cascade=CASCADE_DELETE_ORPHAN)
+    sbom_diffs = relationship("SBOMDiff", back_populates="project", cascade=CASCADE_DELETE_ORPHAN)
+    tickets = relationship("Ticket", back_populates="project", cascade=CASCADE_DELETE_ORPHAN)
+    alerts = relationship("Alert", back_populates="project", cascade=CASCADE_DELETE_ORPHAN)
 
 class Repository(Base):
     __tablename__ = "repositories"
     id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Integer, ForeignKey(PROJECTS_ID_FK, ondelete=CASCADE_ON_DELETE), nullable=False)
     url = Column(String(500), nullable=False)
     branch = Column(String(100), default="main")
     credentials = Column(String(200), nullable=True) # optional token/pass
@@ -77,7 +84,7 @@ class Repository(Base):
 class Scan(Base):
     __tablename__ = "scans"
     id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Integer, ForeignKey(PROJECTS_ID_FK, ondelete=CASCADE_ON_DELETE), nullable=False)
     status = Column(String(50), default="PENDING") # PENDING, RUNNING, COMPLETED, FAILED
     triggered_by = Column(String(100), default="system")
     started_at = Column(DateTime, default=get_utc_now)
@@ -86,18 +93,18 @@ class Scan(Base):
     log = Column(Text, nullable=True)
     
     project = relationship("Project", back_populates="scans")
-    sboms = relationship("SBOM", back_populates="scan", cascade="all, delete-orphan")
-    anomalies = relationship("Anomaly", back_populates="scan", cascade="all, delete-orphan")
-    risk_assessments = relationship("RiskAssessment", back_populates="scan", cascade="all, delete-orphan")
-    remediations = relationship("RemediationRecommendation", back_populates="scan", cascade="all, delete-orphan")
-    ml_predictions = relationship("MLPrediction", back_populates="scan", cascade="all, delete-orphan")
-    alerts = relationship("Alert", back_populates="scan", cascade="all, delete-orphan")
+    sboms = relationship("SBOM", back_populates="scan", cascade=CASCADE_DELETE_ORPHAN)
+    anomalies = relationship("Anomaly", back_populates="scan", cascade=CASCADE_DELETE_ORPHAN)
+    risk_assessments = relationship("RiskAssessment", back_populates="scan", cascade=CASCADE_DELETE_ORPHAN)
+    remediations = relationship("RemediationRecommendation", back_populates="scan", cascade=CASCADE_DELETE_ORPHAN)
+    ml_predictions = relationship("MLPrediction", back_populates="scan", cascade=CASCADE_DELETE_ORPHAN)
+    alerts = relationship("Alert", back_populates="scan", cascade=CASCADE_DELETE_ORPHAN)
 
 class SBOM(Base):
     __tablename__ = "sboms"
     id = Column(Integer, primary_key=True, index=True)
-    scan_id = Column(Integer, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    scan_id = Column(Integer, ForeignKey(SCANS_ID_FK, ondelete=CASCADE_ON_DELETE), nullable=False)
+    project_id = Column(Integer, ForeignKey(PROJECTS_ID_FK, ondelete=CASCADE_ON_DELETE), nullable=False)
     format = Column(String(50), default="CycloneDX") # CycloneDX, SPDX
     version = Column(String(50), default="1.4")
     generated_at = Column(DateTime, default=get_utc_now)
@@ -107,12 +114,12 @@ class SBOM(Base):
     verification_status = Column(String(50), default="UNKNOWN") # VALID, INVALID, UNSIGNED
     
     scan = relationship("Scan", back_populates="sboms")
-    components = relationship("SBOMComponent", back_populates="sbom", cascade="all, delete-orphan")
+    components = relationship("SBOMComponent", back_populates="sbom", cascade=CASCADE_DELETE_ORPHAN)
 
 class SBOMComponent(Base):
     __tablename__ = "sbom_components"
     id = Column(Integer, primary_key=True, index=True)
-    sbom_id = Column(Integer, ForeignKey("sboms.id", ondelete="CASCADE"), nullable=False)
+    sbom_id = Column(Integer, ForeignKey(SBOMS_ID_FK, ondelete=CASCADE_ON_DELETE), nullable=False)
     name = Column(String(200), nullable=False, index=True)
     version = Column(String(100), nullable=False)
     ecosystem = Column(String(50), nullable=False, index=True) # npm, pypi, maven, docker
@@ -122,19 +129,19 @@ class SBOMComponent(Base):
     license = Column(String(100), nullable=True)
     hash_sha256 = Column(String(64), nullable=True)
     component_type = Column(String(50), default="library") # library, application, container
-    depth = Column(Integer, default=0) # direct=0, transitive>0
+    depth = Column(Integer, default=0) # direct is 0, transitive is greater than 0
     direct = Column(Boolean, default=True)
     source_file = Column(String(500), nullable=True) # manifest source
     confidence = Column(Float, default=1.0) # confidence level of identification (0.0 - 1.0)
     
     sbom = relationship("SBOM", back_populates="components")
-    evidence = relationship("Evidence", back_populates="component", cascade="all, delete-orphan")
+    evidence = relationship("Evidence", back_populates="component", cascade=CASCADE_DELETE_ORPHAN)
     vulnerabilities = relationship("Vulnerability", secondary=component_vulnerabilities, back_populates="components")
 
 class Dependency(Base):
     __tablename__ = "dependencies"
     id = Column(Integer, primary_key=True, index=True)
-    sbom_id = Column(Integer, ForeignKey("sboms.id", ondelete="CASCADE"), nullable=False)
+    sbom_id = Column(Integer, ForeignKey(SBOMS_ID_FK, ondelete=CASCADE_ON_DELETE), nullable=False)
     component_purl = Column(String(500), nullable=False, index=True)
     dependent_purl = Column(String(500), nullable=False, index=True) # purl of component depending on it
     relationship_type = Column(String(50), default="depends-on")
@@ -155,7 +162,7 @@ class Vulnerability(Base):
 class Anomaly(Base):
     __tablename__ = "anomalies"
     id = Column(Integer, primary_key=True, index=True)
-    scan_id = Column(Integer, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
+    scan_id = Column(Integer, ForeignKey(SCANS_ID_FK, ondelete=CASCADE_ON_DELETE), nullable=False)
     component_purl = Column(String(500), nullable=False, index=True)
     anomaly_score = Column(Float, nullable=False) # Isolation Forest score
     anomaly_probability = Column(Float, nullable=False)
@@ -167,7 +174,7 @@ class Anomaly(Base):
 class RiskAssessment(Base):
     __tablename__ = "risk_assessments"
     id = Column(Integer, primary_key=True, index=True)
-    scan_id = Column(Integer, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
+    scan_id = Column(Integer, ForeignKey(SCANS_ID_FK, ondelete=CASCADE_ON_DELETE), nullable=False)
     component_purl = Column(String(500), nullable=False, index=True)
     risk_score = Column(Float, nullable=False) # 0-100 score
     risk_level = Column(String(50), nullable=False) # LOW, MEDIUM, HIGH, CRITICAL
@@ -197,7 +204,7 @@ class Ticket(Base):
     __tablename__ = "tickets"
     id = Column(Integer, primary_key=True, index=True)
     ticket_id = Column(String(50), unique=True, nullable=False, index=True) # e.g. SEC-001
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Integer, ForeignKey(PROJECTS_ID_FK, ondelete=CASCADE_ON_DELETE), nullable=False)
     component_name = Column(String(200), nullable=False)
     component_version = Column(String(100), nullable=False)
     severity = Column(String(50), nullable=False)
@@ -213,8 +220,8 @@ class Ticket(Base):
 class Alert(Base):
     __tablename__ = "alerts"
     id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    scan_id = Column(Integer, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Integer, ForeignKey(PROJECTS_ID_FK, ondelete=CASCADE_ON_DELETE), nullable=False)
+    scan_id = Column(Integer, ForeignKey(SCANS_ID_FK, ondelete=CASCADE_ON_DELETE), nullable=False)
     component_purl = Column(String(500), nullable=False, index=True)
     risk_score = Column(Float, nullable=False)
     reason = Column(Text, nullable=False)
@@ -237,9 +244,9 @@ class AuditLog(Base):
 class SBOMVersion(Base):
     __tablename__ = "sbom_versions"
     id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Integer, ForeignKey(PROJECTS_ID_FK, ondelete=CASCADE_ON_DELETE), nullable=False)
     version_number = Column(Integer, nullable=False)
-    sbom_id = Column(Integer, ForeignKey("sboms.id", ondelete="CASCADE"), nullable=False)
+    sbom_id = Column(Integer, ForeignKey(SBOMS_ID_FK, ondelete=CASCADE_ON_DELETE), nullable=False)
     created_at = Column(DateTime, default=get_utc_now)
     
     project = relationship("Project", back_populates="sbom_versions")
@@ -247,7 +254,7 @@ class SBOMVersion(Base):
 class SBOMDiff(Base):
     __tablename__ = "sbom_diffs"
     id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Integer, ForeignKey(PROJECTS_ID_FK, ondelete=CASCADE_ON_DELETE), nullable=False)
     base_scan_id = Column(Integer, nullable=False)
     head_scan_id = Column(Integer, nullable=False)
     added_json = Column(Text, nullable=True) # JSON list of components added
@@ -260,7 +267,7 @@ class SBOMDiff(Base):
 class Evidence(Base):
     __tablename__ = "evidence"
     id = Column(Integer, primary_key=True, index=True)
-    component_id = Column(Integer, ForeignKey("sbom_components.id", ondelete="CASCADE"), nullable=False)
+    component_id = Column(Integer, ForeignKey("sbom_components.id", ondelete=CASCADE_ON_DELETE), nullable=False)
     filepath = Column(String(500), nullable=False)
     line_number = Column(Integer, nullable=True)
     evidence_type = Column(String(100), nullable=False) # manifest, lockfile, registry_metadata
@@ -271,7 +278,7 @@ class Evidence(Base):
 class RemediationRecommendation(Base):
     __tablename__ = "remediation_recommendations"
     id = Column(Integer, primary_key=True, index=True)
-    scan_id = Column(Integer, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
+    scan_id = Column(Integer, ForeignKey(SCANS_ID_FK, ondelete=CASCADE_ON_DELETE), nullable=False)
     component_purl = Column(String(500), nullable=False, index=True)
     current_version = Column(String(100), nullable=False)
     recommended_version = Column(String(100), nullable=True)
@@ -283,7 +290,7 @@ class RemediationRecommendation(Base):
 class MLPrediction(Base):
     __tablename__ = "ml_predictions"
     id = Column(Integer, primary_key=True, index=True)
-    scan_id = Column(Integer, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
+    scan_id = Column(Integer, ForeignKey(SCANS_ID_FK, ondelete=CASCADE_ON_DELETE), nullable=False)
     component_purl = Column(String(500), nullable=False, index=True)
     prediction_type = Column(String(50), nullable=False) # anomaly, malicious
     features_json = Column(Text, nullable=False)

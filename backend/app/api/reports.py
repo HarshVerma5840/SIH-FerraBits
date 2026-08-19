@@ -7,7 +7,9 @@ from backend.app.engines import generate_csv_report, generate_executive_json_rep
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
-@router.get("/project/{project_id}/executive")
+NO_SCAN_DATA_MSG = "No scan data found"
+
+@router.get("/project/{project_id}/executive", responses={404: {"description": "Project or scan data or SBOM not found"}})
 def get_executive_report(project_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     _ = current_user
     project = db.query(Project).get(project_id)
@@ -59,7 +61,7 @@ def get_executive_report(project_id: int, db: Session = Depends(get_db), current
     )
     return rep
 
-@router.get("/project/{project_id}/csv")
+@router.get("/project/{project_id}/csv", responses={404: {"description": "Project, scan, or SBOM not found"}})
 def get_csv_report_file(project_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     _ = current_user
     project = db.query(Project).get(project_id)
@@ -68,7 +70,7 @@ def get_csv_report_file(project_id: int, db: Session = Depends(get_db), current_
         
     latest_scan = db.query(Scan).filter_by(project_id=project_id).order_by(Scan.created_at.desc()).first()
     if not latest_scan:
-        raise HTTPException(status_code=404, detail="No scan data found")
+        raise HTTPException(status_code=404, detail=NO_SCAN_DATA_MSG)
         
     sbom = db.query(SBOM).filter_by(scan_id=latest_scan.id).first()
     if not sbom:
@@ -109,13 +111,13 @@ def get_csv_report_file(project_id: int, db: Session = Depends(get_db), current_
         headers={"Content-Disposition": f"attachment; filename=sbom_report_{project.name}.csv"}
     )
 
-@router.get("/project/{project_id}/cyclonedx")
+@router.get("/project/{project_id}/cyclonedx", responses={404: {"description": "Scan data or CycloneDX SBOM not found"}})
 def download_cyclonedx_file(project_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     _ = current_user
     project = db.query(Project).get(project_id)
     latest_scan = db.query(Scan).filter_by(project_id=project_id).order_by(Scan.created_at.desc()).first()
     if not latest_scan:
-        raise HTTPException(status_code=404, detail="No scan data found")
+        raise HTTPException(status_code=404, detail=NO_SCAN_DATA_MSG)
     sbom = db.query(SBOM).filter_by(scan_id=latest_scan.id).first()
     if not sbom:
         raise HTTPException(status_code=404, detail="No CycloneDX SBOM found")
@@ -126,13 +128,13 @@ def download_cyclonedx_file(project_id: int, db: Session = Depends(get_db), curr
         headers={"Content-Disposition": f"attachment; filename=cyclonedx_{project.name}.json"}
     )
 
-@router.get("/project/{project_id}/spdx")
+@router.get("/project/{project_id}/spdx", responses={404: {"description": "Scan data or SBOM not found"}, 500: {"description": "Failed to generate SPDX representation"}})
 def download_spdx_file(project_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     _ = current_user
     project = db.query(Project).get(project_id)
     latest_scan = db.query(Scan).filter_by(project_id=project_id).order_by(Scan.created_at.desc()).first()
     if not latest_scan:
-        raise HTTPException(status_code=404, detail="No scan data found")
+        raise HTTPException(status_code=404, detail=NO_SCAN_DATA_MSG)
     sbom = db.query(SBOM).filter_by(scan_id=latest_scan.id).first()
     if not sbom:
         raise HTTPException(status_code=404, detail="No SBOM found")

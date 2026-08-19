@@ -202,8 +202,7 @@ def _evaluate_comp_policy_and_tickets(project_id, scan, project, comp_data, comp
             project.tickets.append(ticket_rec)
             _log_msg(f"Auto-created ticket {ticket_id} for package '{comp_data['name']}' due to {risk_res['risk_level']} risk level.", logs)
 
-def _run_graph_and_risk_phase(project_id, scan, project, components_for_graph, purl_to_vulns, discovery_results, policy_rules, logs):
-    _log_msg("Building Dependency Attack Graph...", logs)
+def _parse_dependencies(discovery_results):
     relations = {}
     for comp in discovery_results["components"]:
         purl = comp["purl"]
@@ -215,6 +214,52 @@ def _run_graph_and_risk_phase(project_id, scan, project, components_for_graph, p
                     children_purls.append(child_match["purl"])
             if children_purls:
                 relations[purl] = children_purls
+    return relations
+
+def _evaluate_single_component_risk(project_id, scan, project, comp_data, graph_data, purl_to_vulns, policy_rules, logs):
+    purl = comp_data["purl"]
+    
+    # Blast Radius (Engine 31)
+    blast_radius_res = calculate_blast_radius(purl, graph_data["nodes"], graph_data["edges"])
+    
+    # Contextual Security & VEX (Engine 33 / 34)
+    comp_vulns = purl_to_vulns[purl]
+    _ = evaluate_contextual_security(comp_data, comp_vulns)
+    
+    # Risk Prioritization (Engine 37)
+    anomaly_info = {"anomaly_score": comp_data["anomaly_score"]}
+    risk_res = prioritize_risk(comp_data, comp_vulns, blast_radius_res, anomaly_info)
+    comp_data["risk_score"] = risk_res["risk_score"]
+    
+    risk_desc = generate_security_explanation(comp_data, comp_vulns, risk_res["risk_score"], blast_radius_res)
+    risk_model = RiskAssessment(
+        component_purl=purl,
+        risk_score=risk_res["risk_score"],
+        risk_level=risk_res["risk_level"],
+        explanation=risk_desc,
+        blast_radius_json=json.dumps(blast_radius_res),
+        production_exposure=blast_radius_res["production_exposure"]
+    )
+    scan.risk_assessments.append(risk_model)
+    
+    remediation_res = get_remediation_recommendation(comp_data, comp_vulns)
+    if remediation_res["remediation_recommended"]:
+        rem_model = RemediationRecommendation(
+            component_purl=purl,
+            current_version=remediation_res["current_version"],
+            recommended_version=remediation_res["recommended_version"],
+            upgrade_impact=remediation_res["upgrade_impact"],
+            remediation_type="upgrade"
+        )
+        scan.remediations.append(rem_model)
+        
+    _evaluate_comp_policy_and_tickets(
+        project_id, scan, project, comp_data, comp_vulns, risk_res, risk_desc, remediation_res, policy_rules, logs
+    )
+
+def _run_graph_and_risk_phase(project_id, scan, project, components_for_graph, purl_to_vulns, discovery_results, policy_rules, logs):
+    _log_msg("Building Dependency Attack Graph...", logs)
+    relations = _parse_dependencies(discovery_results)
                 
     graph_data = build_dependency_graph(components_for_graph, relations)
     pending_dependencies = []
@@ -223,45 +268,7 @@ def _run_graph_and_risk_phase(project_id, scan, project, components_for_graph, p
         
     _log_msg("Calculating Blast Radius, VEX Context, and Risk scores...", logs)
     for comp_data in components_for_graph:
-        purl = comp_data["purl"]
-        
-        # Blast Radius (Engine 31)
-        blast_radius_res = calculate_blast_radius(purl, graph_data["nodes"], graph_data["edges"])
-        
-        # Contextual Security & VEX (Engine 33 / 34)
-        comp_vulns = purl_to_vulns[purl]
-        _ = evaluate_contextual_security(comp_data, comp_vulns)
-        
-        # Risk Prioritization (Engine 37)
-        anomaly_info = {"anomaly_score": comp_data["anomaly_score"]}
-        risk_res = prioritize_risk(comp_data, comp_vulns, blast_radius_res, anomaly_info)
-        comp_data["risk_score"] = risk_res["risk_score"]
-        
-        risk_desc = generate_security_explanation(comp_data, comp_vulns, risk_res["risk_score"], blast_radius_res)
-        risk_model = RiskAssessment(
-            component_purl=purl,
-            risk_score=risk_res["risk_score"],
-            risk_level=risk_res["risk_level"],
-            explanation=risk_desc,
-            blast_radius_json=json.dumps(blast_radius_res),
-            production_exposure=blast_radius_res["production_exposure"]
-        )
-        scan.risk_assessments.append(risk_model)
-        
-        remediation_res = get_remediation_recommendation(comp_data, comp_vulns)
-        if remediation_res["remediation_recommended"]:
-            rem_model = RemediationRecommendation(
-                component_purl=purl,
-                current_version=remediation_res["current_version"],
-                recommended_version=remediation_res["recommended_version"],
-                upgrade_impact=remediation_res["upgrade_impact"],
-                remediation_type="upgrade"
-            )
-            scan.remediations.append(rem_model)
-            
-        _evaluate_comp_policy_and_tickets(
-            project_id, scan, project, comp_data, comp_vulns, risk_res, risk_desc, remediation_res, policy_rules, logs
-        )
+        _evaluate_single_component_risk(project_id, scan, project, comp_data, graph_data, purl_to_vulns, policy_rules, logs)
         
     return graph_data, pending_dependencies
 

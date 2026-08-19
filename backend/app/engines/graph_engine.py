@@ -1,22 +1,5 @@
-def build_dependency_graph(components, dependencies_relations=None):
-    """
-    Engine 30: Dependency Attack Graph Engine
-    Builds nodes and edges representing the dependency tree.
-    Nodes carry version, risk, vulnerabilities, and license details.
-    """
+def _create_nodes(components):
     nodes = []
-    edges = []
-    
-    # 1. Add application root node
-    nodes.append({
-        "id": "root",
-        "label": "Application",
-        "type": "root",
-        "risk_score": 0,
-        "vulnerability_count": 0
-    })
-    
-    # Track nodes by PURL
     purl_to_node = {}
     for c in components:
         purl = c["purl"]
@@ -40,8 +23,10 @@ def build_dependency_graph(components, dependencies_relations=None):
         }
         nodes.append(node)
         purl_to_node[purl] = node
-        
-    # 2. Add edges
+    return nodes, purl_to_node
+
+def _create_edges(components, dependencies_relations):
+    edges = []
     # If we have direct relationships parsed from lockfiles
     if dependencies_relations:
         for parent, children in dependencies_relations.items():
@@ -60,8 +45,31 @@ def build_dependency_graph(components, dependencies_relations=None):
                     "source": "root",
                     "target": purl
                 })
-            # Add transitive relations if parents are known (based on names, or nested)
-            # In a basic flat fallback, we can connect deep ones to their ecosystem direct deps
+    return edges
+
+def build_dependency_graph(components, dependencies_relations=None):
+    """
+    Engine 30: Dependency Attack Graph Engine
+    Builds nodes and edges representing the dependency tree.
+    Nodes carry version, risk, vulnerabilities, and license details.
+    """
+    nodes = []
+    
+    # 1. Add application root node
+    nodes.append({
+        "id": "root",
+        "label": "Application",
+        "type": "root",
+        "risk_score": 0,
+        "vulnerability_count": 0
+    })
+    
+    # Track nodes by PURL
+    component_nodes, _ = _create_nodes(components)
+    nodes.extend(component_nodes)
+        
+    # 2. Add edges
+    edges = _create_edges(components, dependencies_relations)
             
     # Calculate root metrics
     total_vulns = sum(n["vulnerability_count"] for n in nodes if n["id"] != "root")

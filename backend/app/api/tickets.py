@@ -8,8 +8,8 @@ from typing import Optional
 router = APIRouter(prefix="/tickets", tags=["Tickets"])
 
 class TicketUpdate(BaseModel):
-    status: Optional[str] # OPEN, IN_PROGRESS, RESOLVED
-    assignee: Optional[str]
+    status: Optional[str] = None # OPEN, IN_PROGRESS, RESOLVED
+    assignee: Optional[str] = None
 
 @router.get("")
 def list_tickets(project_id: Optional[int] = None, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
@@ -19,7 +19,7 @@ def list_tickets(project_id: Optional[int] = None, db: Session = Depends(get_db)
         query = query.filter_by(project_id=project_id)
     return query.all()
 
-@router.put("/{ticket_id}")
+@router.put("/{ticket_id}", responses={404: {"description": "Ticket not found"}})
 def update_ticket(ticket_id: str, data: TicketUpdate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     # Find ticket by ticket_id string
     ticket = db.query(Ticket).filter_by(ticket_id=ticket_id).first()

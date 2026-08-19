@@ -32,7 +32,7 @@ def list_vulnerabilities(db: Session = Depends(get_db), current_user = Depends(g
         })
     return out
 
-@router.put("/vex")
+@router.put("/vex", responses={404: {"description": "Risk assessment entry not found for this component scan"}})
 def update_vex_status(data: VexUpdateRequest, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     assess = db.query(RiskAssessment).filter_by(
         scan_id=data.scan_id,

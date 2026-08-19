@@ -7,10 +7,12 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+from typing import Optional
+
 class RegisterSchema(BaseModel):
     username: str
     password: str
-    email: str = None
+    email: Optional[str] = None
     role: str = "DEVELOPER"
 
 class LoginResponse(BaseModel):
@@ -19,7 +21,7 @@ class LoginResponse(BaseModel):
     username: str
     role: str
 
-@router.post("/register", status_code=status.HTTP_201_CREATED)
+@router.post("/register", status_code=status.HTTP_201_CREATED, responses={400: {"description": "Username already exists or role not permitted"}})
 def register(data: RegisterSchema, db: Session = Depends(get_db)):
     existing = db.query(User).filter_by(username=data.username).first()
     if existing:
@@ -49,7 +51,7 @@ def register(data: RegisterSchema, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "User registered successfully"}
 
-@router.post("/login", response_model=LoginResponse)
+@router.post("/login", response_model=LoginResponse, responses={400: {"description": "Incorrect username or password"}})
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter_by(username=form_data.username).first()
     if not user or not verify_password(form_data.password, user.password_hash):

@@ -98,7 +98,7 @@ def run_anomaly_detection(component):
     if anomaly_model and scaler:
         try:
             scaled = scaler.transform([features])
-            pred = anomaly_model.predict(scaled)[0] # -1 = anomaly, 1 = normal
+            pred = anomaly_model.predict(scaled)[0] # anomaly is -1, normal is 1
             score_samples = anomaly_model.score_samples(scaled)[0] # negative values, lower means more anomalous
             
             # Map score_samples (typical range -0.8 to -0.3) to 0-100 anomaly score
@@ -342,15 +342,15 @@ def get_remediation_recommendation(component, vulnerabilities):
             
     recommended = None
     if fixed_versions:
-        # Take the maximum recommended version (simply sort or return the first)
-        recommended = sorted(fixed_versions, key=lambda x: parse_semver(x))[-1]
+        # Take the maximum recommended version
+        recommended = max(fixed_versions, key=parse_semver)
         
     if recommended:
         explanation = f"Upgrade {component['name']} to version {recommended} to resolve CVE vulnerability disclosures."
         impact = "Minor library code signature adjustments may be needed. Regression testing of downstream dependents is recommended."
     else:
         recommended = "UNKNOWN"
-        explanation = f"No official vendor patch has been released for these CVE entries. Consider migrating to a secure alternative or applying virtual patches."
+        explanation = "No official vendor patch has been released for these CVE entries. Consider migrating to a secure alternative or applying virtual patches."
         impact = "Requires developer manual architecture analysis."
         
     return {

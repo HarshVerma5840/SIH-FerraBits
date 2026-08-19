@@ -101,7 +101,7 @@ def generate_cyclonedx(project_name, components, dependencies_relations=None):
 def generate_spdx(project_name, components):
     """Engine 11: SBOM Generation Engine (SPDX)"""
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    spdx_id = f"SPDXRef-DOCUMENT"
+    spdx_id = "SPDXRef-DOCUMENT"
     
     spdx_packages = []
     for i, c in enumerate(components):
@@ -141,33 +141,39 @@ def generate_spdx(project_name, components):
     
     return sbom
 
+def _extract_license(c):
+    licenses = []
+    if "licenses" in c:
+        for lic in c["licenses"]:
+            if "license" in lic:
+                licenses.append(lic["license"].get("id") or lic["license"].get("name"))
+    return licenses[0] if licenses else "Unknown"
+
+def _normalize_component(c):
+    license_str = _extract_license(c)
+    
+    hash_str = "Unknown"
+    if "hashes" in c and c["hashes"]:
+        hash_str = c["hashes"][0].get("content")
+        
+    return {
+        "name": c.get("name"),
+        "version": c.get("version", "UNKNOWN"),
+        "purl": c.get("purl"),
+        "ecosystem": c.get("purl", "").split(":")[1].split("/")[0] if ":" in c.get("purl", "") else "Unknown",
+        "supplier": c.get("supplier", {}).get("name", "Unknown") if isinstance(c.get("supplier"), dict) else "Unknown",
+        "license": license_str,
+        "hash": hash_str,
+        "type": c.get("type", "library")
+    }
+
 def normalize_sbom(sbom_dict):
     """Engine 12: SBOM Normalization Engine"""
     # Ensures all fields align with our standardized representation
     normalized = []
     if "components" in sbom_dict:
         for c in sbom_dict["components"]:
-            licenses = []
-            if "licenses" in c:
-                for lic in c["licenses"]:
-                    if "license" in lic:
-                        licenses.append(lic["license"].get("id") or lic["license"].get("name"))
-            license_str = licenses[0] if licenses else "Unknown"
-            
-            hash_str = "Unknown"
-            if "hashes" in c and c["hashes"]:
-                hash_str = c["hashes"][0].get("content")
-                
-            normalized.append({
-                "name": c.get("name"),
-                "version": c.get("version", "UNKNOWN"),
-                "purl": c.get("purl"),
-                "ecosystem": c.get("purl", "").split(":")[1].split("/")[0] if ":" in c.get("purl", "") else "Unknown",
-                "supplier": c.get("supplier", {}).get("name", "Unknown") if isinstance(c.get("supplier"), dict) else "Unknown",
-                "license": license_str,
-                "hash": hash_str,
-                "type": c.get("type", "library")
-            })
+            normalized.append(_normalize_component(c))
     return normalized
 
 def _validate_cyclonedx(sbom_dict, errors):

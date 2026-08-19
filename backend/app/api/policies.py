@@ -15,11 +15,11 @@ class PolicyCreate(BaseModel):
     is_active: Optional[bool] = True
 
 class PolicyUpdate(BaseModel):
-    name: Optional[str]
-    rule_type: Optional[str]
-    rule_condition: Optional[str]
-    action: Optional[str]
-    is_active: Optional[bool]
+    name: Optional[str] = None
+    rule_type: Optional[str] = None
+    rule_condition: Optional[str] = None
+    action: Optional[str] = None
+    is_active: Optional[bool] = None
 
 @router.get("")
 def list_policies(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
@@ -63,7 +63,7 @@ def create_policy(data: PolicyCreate, db: Session = Depends(get_db), current_use
     
     return policy
 
-@router.put("/{policy_id}")
+@router.put("/{policy_id}", responses={404: {"description": "Policy not found"}})
 def update_policy(policy_id: int, data: PolicyUpdate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     policy = db.query(Policy).get(policy_id)
     if not policy:
@@ -86,7 +86,7 @@ def update_policy(policy_id: int, data: PolicyUpdate, db: Session = Depends(get_
     
     return policy
 
-@router.delete("/{policy_id}")
+@router.delete("/{policy_id}", responses={404: {"description": "Policy not found"}})
 def delete_policy(policy_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     policy = db.query(Policy).get(policy_id)
     if not policy:

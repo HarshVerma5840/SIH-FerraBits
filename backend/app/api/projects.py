@@ -42,24 +42,10 @@ def _get_scan_summary(latest_scan, db):
             pass
     return vuln_count, risk_score, risk_level, quality_score
 
-def _load_project_scan_details(latest_scan, db):
-    components = []
-    vulnerabilities = []
-    anomalies = []
-    remediations = []
-    risk_summary = {"score": 0, "level": "LOW"}
-    quality_score = 100
-    
-    if not latest_scan:
-        return components, vulnerabilities, anomalies, remediations, risk_summary, quality_score
-        
-    sbom = db.query(SBOM).filter_by(scan_id=latest_scan.id).first()
-    if not sbom:
-        return components, vulnerabilities, anomalies, remediations, risk_summary, quality_score
-        
-    db_components = db.query(SBOMComponent).filter_by(sbom_id=sbom.id).all()
+def _load_assessments_and_remediations(latest_scan, db):
     assessments = db.query(RiskAssessment).filter_by(scan_id=latest_scan.id).all()
     assess_map = {a.component_purl: a for a in assessments}
+    risk_summary = {"score": 0, "level": "LOW"}
     if assessments:
         max_score = max([a.risk_score for a in assessments] or [0])
         level = "LOW"
@@ -75,7 +61,10 @@ def _load_project_scan_details(latest_scan, db):
         "recommended_version": r.recommended_version,
         "upgrade_impact": r.upgrade_impact
     } for r in rems]
-    
+    return assess_map, risk_summary, remediations
+
+def _load_anomalies_and_components(latest_scan, sbom, assess_map, db):
+    db_components = db.query(SBOMComponent).filter_by(sbom_id=sbom.id).all()
     anoms = db.query(Anomaly).filter_by(scan_id=latest_scan.id).all()
     anoms_map = {an.component_purl: an for an in anoms}
     anomalies = [{
@@ -86,6 +75,8 @@ def _load_project_scan_details(latest_scan, db):
         "indicators": json.loads(an.indicators_json)
     } for an in anoms]
     
+    components = []
+    vulnerabilities = []
     for c in db_components:
         c_vulns = [{
             "cve_id": v.cve_id,
@@ -116,12 +107,33 @@ def _load_project_scan_details(latest_scan, db):
             "vulnerabilities": c_vulns
         })
         
+    quality_score = 100
     try:
         from backend.app.engines.sbom_engine import calculate_quality_score, normalize_sbom
         quality_score = calculate_quality_score(components).get("score", 100)
     except Exception:
         pass
         
+    return components, vulnerabilities, anomalies, quality_score
+
+def _load_project_scan_details(latest_scan, db):
+    components = []
+    vulnerabilities = []
+    anomalies = []
+    remediations = []
+    risk_summary = {"score": 0, "level": "LOW"}
+    quality_score = 100
+    
+    if not latest_scan:
+        return components, vulnerabilities, anomalies, remediations, risk_summary, quality_score
+        
+    sbom = db.query(SBOM).filter_by(scan_id=latest_scan.id).first()
+    if not sbom:
+        return components, vulnerabilities, anomalies, remediations, risk_summary, quality_score
+        
+    assess_map, risk_summary, remediations = _load_assessments_and_remediations(latest_scan, db)
+    components, vulnerabilities, anomalies, quality_score = _load_anomalies_and_components(latest_scan, sbom, assess_map, db)
+    
     return components, vulnerabilities, anomalies, remediations, risk_summary, quality_score
 
 @router.get("")
@@ -146,7 +158,7 @@ def list_projects(db: Session = Depends(get_db), current_user = Depends(get_curr
         })
     return out
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED, responses={400: {"description": "Project with this name already exists"}})
 def create_project(data: ProjectCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     _ = current_user
     existing = db.query(Project).filter_by(name=data.name).first()
@@ -158,7 +170,7 @@ def create_project(data: ProjectCreate, db: Session = Depends(get_db), current_u
     db.refresh(p)
     return p
 
-@router.get("/{project_id}")
+@router.get("/{project_id}", responses={404: {"description": "Project not found"}})
 def get_project_details(project_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     _ = current_user
     project = db.query(Project).get(project_id)
@@ -206,7 +218,7 @@ def get_project_history(project_id: int, db: Session = Depends(get_db), current_
         })
     return out
 
-@router.get("/{project_id}/diff/{base_id}/{head_id}")
+@router.get("/{project_id}/diff/{base_id}/{head_id}", responses={404: {"description": "SBOM records not found for diff comparison"}})
 def get_project_diff(project_id: int, base_id: int, head_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     _ = current_user
     diff = db.query(SBOMDiff).filter_by(project_id=project_id, base_scan_id=base_id, head_scan_id=head_id).first()
@@ -254,7 +266,7 @@ def get_project_diff(project_id: int, base_id: int, head_id: int, db: Session = 
         "updated": json.loads(diff.updated_json)
     }
 
-@router.get("/{project_id}/graph")
+@router.get("/{project_id}/graph", responses={404: {"description": "No scan data or SBOM found for graph generation"}})
 def get_project_graph(project_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     _ = current_user
     latest_scan = db.query(Scan).filter_by(project_id=project_id).order_by(Scan.created_at.desc()).first()
@@ -310,7 +322,7 @@ class WhatIfRequest(BaseModel):
     upgrade_purl: str
     target_version: str
 
-@router.post("/{project_id}/whatif")
+@router.post("/{project_id}/whatif", responses={404: {"description": "No scan data or SBOM found for simulation"}})
 def simulate_whatif(project_id: int, data: WhatIfRequest, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     _ = current_user
     latest_scan = db.query(Scan).filter_by(project_id=project_id).order_by(Scan.created_at.desc()).first()
